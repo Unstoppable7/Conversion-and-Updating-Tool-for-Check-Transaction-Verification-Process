@@ -26,7 +26,13 @@ class TextRedirector:
         pass
 
 def abrir_quickbooks_report():
-    archivo = filedialog.askopenfilename(title="Seleccionar archivo central", filetypes=[("Archivos XLSX", "*.xlsx")])
+    archivo = filedialog.askopenfilename(title="Select Quickbooks report", filetypes=[("Archivos XLSX", "*.xlsx")])
+    if archivo:
+        entrada_quickbooks_report.delete(0, tk.END)
+        entrada_quickbooks_report.insert(0, archivo)
+
+def abrir_historial_de_transacciones_file():
+    archivo = filedialog.askopenfilename(title="Select transactions history file", filetypes=[("Archivos XLSX", "*.xlsx")])
     if archivo:
         entrada_quickbooks_report.delete(0, tk.END)
         entrada_quickbooks_report.insert(0, archivo)
@@ -88,18 +94,29 @@ def process():
     format_report_total_task = 6
 
     ##################################### Manejo de entrada de archivos
-    archivo_quickbooks_report = entrada_quickbooks_report.get()
+    input_quickbooks_report = entrada_quickbooks_report.get()
+    input_transactions_history = entrada_historial_de_transacciones_file.get()
 
     #Tratamos si los archivos estan vacios
-    if archivo_quickbooks_report == "":
+    if input_quickbooks_report == "":
         messagebox.showerror("Error", "No file selected as Quickbooks report")
         execution_in_progress = False
         return
-    
+    if input_transactions_history == "":
+        messagebox.showerror("Error", "No file selected as Transactions History File")
+        execution_in_progress = False
+        return
+
     try:
-        archivo_quickbooks_report_name = archivo_quickbooks_report.rsplit('/', 1)[1]
+        quickbooks_report_name = input_quickbooks_report.rsplit('/', 1)[1]
     except:
         messagebox.showerror("Error", "No file selected as Quickbooks report")
+        execution_in_progress = False
+        return
+    try:
+        transactions_history_name = input_transactions_history.rsplit('/', 1)[1]
+    except:
+        messagebox.showerror("Error", "No file selected as Transactions History File")
         execution_in_progress = False
         return
     
@@ -108,10 +125,10 @@ def process():
 
     # Verificacion de formato quickbook report
     try:
-        qb_report_df = pd.read_excel(archivo_quickbooks_report, header=None, sheet_name="Sheet1")           
+        qb_report_df = pd.read_excel(input_quickbooks_report, header=None, sheet_name="Sheet1")           
 
     except:
-        messagebox.showerror("Error", "Check Positive Pay Quickbooks report '" + archivo_quickbooks_report_name + "' is not in the correct format. \n\nIt is necessary that the sheet where the report is located has the name 'Sheet1'. \n\nPlease check the Quickbooks report and try again")
+        messagebox.showerror("Error", "Check Positive Pay Quickbooks report '" + quickbooks_report_name + "' is not in the correct format. \n\nIt is necessary that the sheet where the report is located has the name 'Sheet1'. \n\nPlease check the Quickbooks report and try again")
         clean(clean_inputs=False)
         return
 
@@ -119,16 +136,27 @@ def process():
 
         if not ((not pd.isna(qb_report_df.iat[1,1])) and str(qb_report_df.iat[0, 4]) == "Date" and str(qb_report_df.iat[0, 6]) == "Num" and str(qb_report_df.iat[0, 8]) == "Name" and str(qb_report_df.iat[0, 10]) == "Credit"):
 
-            messagebox.showerror("Error", "Check Positive Pay Quickbooks report '" + archivo_quickbooks_report_name + "' is not in the correct format. \n\nPlease check the Quickbooks report and try again")
+            messagebox.showerror("Error", "Check Positive Pay Quickbooks report '" + quickbooks_report_name + "' is not in the correct format. \n\nPlease check the Quickbooks report and try again")
             
             #Ocultamos barra de progreso y limpiamos caja de texto
             clean(clean_inputs=False)
             return
     except:
-        messagebox.showerror("Error", "It is not possible to access the information of the Quickbooks report '" + archivo_quickbooks_report_name + "' \n\nPlease check the Quickbooks report and try again")
+        messagebox.showerror("Error", "It is not possible to access the information of the Quickbooks report '" + quickbooks_report_name + "' \n\nPlease check the Quickbooks report and try again")
         clean(False)
         return
     
+    # Verificacion de formato transactions history file
+    try:
+        #Esto cargará todas las hojas del archivo Excel en un diccionario llamado transactions_history_df, donde las claves del diccionario serán los nombres de las hojas y los valores serán los DataFrames correspondientes
+        transactions_history_df = pd.read_excel(input_transactions_history, sheet_name=None)           
+
+    except:
+        messagebox.showerror("Error", "'" + transactions_history_name + "' is not in the correct format. \n\nIt is necessary that the sheet where the report is located has the name 'Sheet1'. \n\nPlease check the Quickbooks report and try again")
+        clean(clean_inputs=False)
+        return
+    
+
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Deleting unnecessary data")
 
@@ -137,7 +165,9 @@ def process():
     #Extraemos las filas que tengan las celda de la columna 10 vacia
     # account_range_limit = account_range_limit[account_range_limit[10].isna()]
 
-    ############# Eliminar columnas vacias y extras
+    #TODO crear lista de cuentas a buscar en lista actualizada
+
+    ############### Eliminar columnas vacias y extras
     columnas_a_eliminar_qb_report = [0,1,2,3,5,7,9]  # Índices de las columnas a eliminar
     columnas_extras_a_eliminar_qb_report = 4 #A partir del este numero se eliminaran
     try:
@@ -170,6 +200,7 @@ def process():
     update_progress_bar(1,format_report_total_task,"Inserting column with account numbers")
 
     ############## Insertar una nueva columna llamada 'tmp' y asignar valores según los rangos, agrega el rango desde uno menos del inicio hasta uno menos del final
+    ######################################AQUI VOY A REALIZAR EL ORDENAMIENTO Y EL FILTRADO POR CADA CUENTA
     for i in range(int(len(account_range_limit) / 2)):
         index = i + 1
         qb_report_df.loc[account_range_limit.index[i * 2]:(account_range_limit.index[(i * 2) + 1]), 'tmp'] = "439780" + str(account_range_limit.iat[i * 2, 0])[:4]
@@ -179,6 +210,12 @@ def process():
 
     # Eliminar las filas con valores nulos en la columna especificada
     qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
+
+    print(account_range_limit)
+
+    qb_report_df.to_excel("TEST.xlsx",index=None,header=None)
+
+    sys.exit()
 
     ############### Cambiamos de posicion las columnas
 
@@ -255,8 +292,6 @@ def process():
         if not rsp:
             clean(False)
             return
-    # # Formatear las fechas en el DataFrame
-    # qb_report_df[qb_report_df.columns[0]] = qb_report_df[qb_report_df.columns[0]].dt.strftime('%m/%d/%Y')
 
     #Hacemos la misma columna de tipo float
     try:
@@ -285,10 +320,6 @@ def process():
         if not rsp:
             clean(False)
             return
-    # # #Formato columna de montos con dos decimales
-    # qb_report_df[qb_report_df.columns[4]] = qb_report_df[qb_report_df.columns[4]].map('{:.2f}'.format)
-
-    # qb_report_df[qb_report_df.columns[4]] = pd.to_numeric(qb_report_df[qb_report_df.columns[4]])
 
     #Eliminar simbolos de la columna nombres, exceptuando los espacios
     qb_report_df[qb_report_df.columns[5]] = qb_report_df[qb_report_df.columns[5]].replace(r'[^a-zA-Z0-9\s]', '', regex=True)
@@ -378,7 +409,7 @@ execution_in_progress = False
 ventana = tk.Tk()
 
 # Configurar el tamaño de la ventana
-ventana.geometry("650x500")
+ventana.geometry("800x500")
 
 # Configurar el mensaje de bienvenida
 mensaje_bienvenida = tk.Label(ventana, text="Formatting for TD Bank Transaction Verification", font=("Arial", 20))
@@ -387,6 +418,10 @@ subtitulo_quickbooks_report = tk.Label(ventana, text="Check Positive Pay Quickbo
 entrada_quickbooks_report = tk.Entry(ventana, width=40)
 boton_quickbooks_report = tk.Button(ventana, text="Select file", command=abrir_quickbooks_report, font=("Arial", 10))
 # boton_info_quickbooks_report = tk.Button(ventana, text="Info", command=show_info_Quickbooks_report)
+
+subtitulo_historial_de_transacciones_file = tk.Label(ventana, text="Transaction History File", font=("Arial", 14))
+entrada_historial_de_transacciones_file = tk.Entry(ventana, width=40)
+boton_historial_de_transacciones_file = tk.Button(ventana, text="Select file", command=abrir_historial_de_transacciones_file, font=("Arial", 10))
 
 # Configurar el botón de procesamiento
 boton_procesar = tk.Button(ventana, text="Start Process", font=("Arial", 18), command=run_thread)
@@ -408,10 +443,15 @@ barra_progreso_label = tk.Label(ventana, text="", font=("Arial", 12))
 mensaje_bienvenida.place(relx=0.5, rely=0.1, anchor="center")
 
 # Configurar los subtitulos y las cajas de texto de archivo central
-subtitulo_quickbooks_report.place(relx=0.5, rely=0.22, anchor="center")
-entrada_quickbooks_report.place(relx=0.5, rely=0.27, anchor="center")
-boton_quickbooks_report.place(relx=0.5, rely=0.33, anchor="center")
+subtitulo_quickbooks_report.place(relx=0.7, rely=0.22, anchor="center")
+entrada_quickbooks_report.place(relx=0.7, rely=0.27, anchor="center")
+boton_quickbooks_report.place(relx=0.7, rely=0.33, anchor="center")
 # boton_info_quickbooks_report.place(relx=0.68, rely=0.25, anchor="center")
+
+# Configurar los subtitulos y las cajas de texto de archivo de historial de transacciones
+subtitulo_historial_de_transacciones_file.place(relx=0.3, rely=0.22, anchor="center")
+entrada_historial_de_transacciones_file.place(relx=0.3, rely=0.27, anchor="center")
+boton_historial_de_transacciones_file.place(relx=0.3, rely=0.33, anchor="center")
 
 # Configurar el botón de procesamiento
 boton_procesar.place(relx=0.5, rely=0.45, anchor="center")
