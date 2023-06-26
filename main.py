@@ -5,11 +5,10 @@ from tkinter import ttk
 import sys
 import threading
 import pandas as pd
-import re
 import time
-import openpyxl as px
-from openpyxl.styles import numbers
+from datetime import datetime
 
+today = str(datetime.now().strftime("%m%d%Y %p%#I"))
 
 # Crear una clase personalizada para redirigir la salida a la caja de texto
 class TextRedirector:
@@ -203,6 +202,45 @@ def process():
     columns.insert(position, column_to_move)
     qb_report_df = qb_report_df[columns]
 
+    # Extraemos transacciones sin monto (void)
+    transaction_amount_column = 4
+    void_transactions = qb_report_df.loc[qb_report_df[qb_report_df.columns[transaction_amount_column]].isnull()]
+
+    #Eliminamos las transacciones en las que el monto sea vacio (void)
+    qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[transaction_amount_column]])
+
+    try:
+        #Le damos formato a las fechas del dataframe de las transacciones void
+        void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
+
+    except Exception as e:
+        pass
+
+    void_transactions_name_file = f"VOID TRANSACTIONS {today}.xlsx"
+
+    try_again = True
+    while try_again:  
+        try:
+            #Guardamos las transacciones void en un archivo aparte
+            if(not void_transactions.empty):
+
+                void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
+                print(f"Void transactions file has been created\n")
+
+            try_again = False
+        except PermissionError:
+            
+            rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
+
+            if not rsp:
+                clean(False)
+                return
+        except Exception as e:
+            messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
+            #Ocultamos barra de progreso y limpiamos caja de texto
+            clean(False)
+            return
+    
     ######## Formato especifico a los datos
 
     #Acutalizamos barra de progreso
@@ -248,14 +286,14 @@ def process():
     #Cortamos los nombres hasta un maximo de 30 caracteres
     qb_report_df[qb_report_df.columns[5]] = qb_report_df[qb_report_df.columns[5]].str.slice(0, 30)
     
-    result_file_name_xlsx = "TEST.xlsx"
-    result_file_name_csv = "TEST.csv"
+    result_file_name_xlsx = f"APDC {today}.xlsx"
+    result_file_name_csv = f"APDC {today}.csv"
 
     retry = True
     while retry:
         try:
             # Crear el objeto ExcelWriter con el formato deseado
-            writer = pd.ExcelWriter(result_file_name_xlsx, engine='xlsxwriter', datetime_format= "mm/dd/yyy")
+            writer = pd.ExcelWriter(result_file_name_xlsx, engine='xlsxwriter', date_format= "mm/dd/yyy")
             qb_report_df.to_excel(writer, sheet_name="Sheet1", index=False,header=None)
 
             retry = False
