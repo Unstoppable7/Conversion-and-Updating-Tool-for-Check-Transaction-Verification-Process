@@ -260,7 +260,7 @@ def process():
 
     #Hacemos la misma columna de tipo float
     try:
-        qb_report_df[qb_report_df.columns[1]] = qb_report_df[qb_report_df.columns[1]].astype(float)
+        qb_report_df[qb_report_df.columns[1]] = qb_report_df[qb_report_df.columns[1]].astype(str)
     except Exception as e:
 
         rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to account number \n\nDo you want to continue anyway?")
@@ -269,9 +269,18 @@ def process():
             clean(False)
             return
     try:
-        qb_report_df[qb_report_df.columns[2]] = qb_report_df[qb_report_df.columns[2]].astype(float)
+        qb_report_df[qb_report_df.columns[2]] = qb_report_df[qb_report_df.columns[2]].astype(str)
     except Exception as e:
         rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction number \n\nDo you want to continue anyway?")
+
+        if not rsp:
+            clean(False)
+            return
+        
+    try:
+        qb_report_df[qb_report_df.columns[4]] = qb_report_df[qb_report_df.columns[4]].astype(float)
+    except Exception as e:
+        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction amount \n\nDo you want to continue anyway?")
 
         if not rsp:
             clean(False)
