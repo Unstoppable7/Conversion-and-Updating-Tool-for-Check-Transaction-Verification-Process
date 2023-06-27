@@ -227,7 +227,13 @@ def process():
             clean(False)
             return
     
-    transactions_for_account_df_list = {}
+    #Eliminamos filas que no contengan numero de cheque
+    indice_columna_numero_transaccion_qb_report = 1
+
+    # Eliminar las filas con valores nulos en la columna especificada
+    qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
+
+    transactions_for_account_df_dic = {}
     ############## Insertar una nueva columna llamada 'tmp' y asignar valores según los rangos, agrega el rango desde uno menos del inicio hasta uno menos del final
     #Ordenar las transacciones de cada cuenta
     for i in range(int(len(account_range_limit) / 2)):
@@ -242,7 +248,7 @@ def process():
         # qb_report_df.loc[start_index:end_index, :] = qb_report_df.loc[start_index:end_index, :].sort_values(by=[qb_report_df.columns[1]], axis=0)
 
         #Exportamos cada dataframe hacia un diccionario
-        transactions_for_account_df_list[account_number] = qb_report_df.loc[start_index:end_index, :]
+        transactions_for_account_df_dic[account_number] = qb_report_df.loc[start_index:end_index, :]
         # Obtener las filas desde el valor buscado hacia abajo
         # qb_report_df = qb_report_df.loc[qb_report_df.index[0]:]
 
@@ -250,7 +256,7 @@ def process():
         # df = df.drop(df.index[:indice])
     
     accounts_no_data = []
-    for key, df in transactions_for_account_df_list.items():
+    for key, df in transactions_for_account_df_dic.items():
         
         #Reseteamos los indices de las columnas
         # value.columns = range(value.shape[1])
@@ -269,7 +275,7 @@ def process():
             messagebox.showinfo("No matches found",f"There is no data to process for account {key}")
 
             #Pasamos un dataframe vacio
-            transactions_for_account_df_list[key] = pd.DataFrame()
+            transactions_for_account_df_dic[key] = pd.DataFrame()
 
             #Lo agregamos como cuenta sin datos
             accounts_no_data.append(key)
@@ -286,22 +292,203 @@ def process():
                 messagebox.showinfo("No data",f"There is no data to process for account {key}")
                 
                 #Pasamos un dataframe vacio
-                transactions_for_account_df_list[key] = pd.DataFrame()
+                transactions_for_account_df_dic[key] = pd.DataFrame()
 
                 #Lo agregamos como cuenta sin datos
                 accounts_no_data.append(key)
             else:
-                transactions_for_account_df_list[key] = df_result
+                transactions_for_account_df_dic[key] = df_result
             # df.to_excel("TEST.xlsx")
 
     for account in accounts_no_data:
         #Borramos el elemento sin coincidencias del diccionario
-        del transactions_for_account_df_list[account]
+        del transactions_for_account_df_dic[account]
 
+
+    # Concatenar los DataFrames del diccionario en uno solo
+    td_bank_report_df = pd.concat(transactions_for_account_df_dic.values(), ignore_index=True)
+
+    # execution_in_progress = False
+    # sys.exit()
+
+    
+
+
+    
+
+    # qb_report_df.to_excel("TEST.xlsx",index=None,header=None)
+
+    ######################## Format TD BANK REPORT
+
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,"Sorting data")
+
+    ### Movemos la columna de numero de cuenta
+    position = 1  # Índice de la posición deseada
+    columns = td_bank_report_df.columns.tolist()
+    column_to_move = columns[4]  # Índice de la columna que deseas mover 
+    columns.remove(column_to_move)
+    columns.insert(position, column_to_move)
+    td_bank_report_df = td_bank_report_df[columns]
+    ### Insertamos columna con la letra I
+    td_bank_report_df.insert(3, '', 'I')
+    ### Movemos la columna de monto
+    position = 4  # Índice de la posición deseada
+    columns = td_bank_report_df.columns.tolist()
+    column_to_move = columns[5]  # Índice de la columna que deseas mover 
+    columns.remove(column_to_move)
+    columns.insert(position, column_to_move)
+    td_bank_report_df = td_bank_report_df[columns]
+
+    # Extraemos transacciones sin monto (void)
+    transaction_amount_column = 4
+    void_transactions = td_bank_report_df.loc[td_bank_report_df[td_bank_report_df.columns[transaction_amount_column]].isnull()]
+
+    #Eliminamos las transacciones en las que el monto sea vacio (void)
+    td_bank_report_df = td_bank_report_df.dropna(subset=[td_bank_report_df.columns[transaction_amount_column]])
+
+    try:
+        #Le damos formato a las fechas del dataframe de las transacciones void
+        void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
+
+    except Exception as e:
+        pass
+
+    void_transactions_name_file = f"VOID TRANSACTIONS {today}.xlsx"
+
+    try_again = True
+    while try_again:  
+        try:
+            #Guardamos las transacciones void en un archivo aparte
+            if(not void_transactions.empty):
+
+                void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
+                print(f"Void transactions file has been created\n")
+
+            try_again = False
+        except PermissionError:
+            
+            rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
+
+            if not rsp:
+                clean(False)
+                return
+        except Exception as e:
+            messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
+            #Ocultamos barra de progreso y limpiamos caja de texto
+            clean(False)
+            return
+    
+    ######## Formato especifico a los datos
+
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,"Assigning data format and conditions")
+
+    # Convertir las columnas a tipo de datos de fecha
+    try:
+        td_bank_report_df[td_bank_report_df.columns[0]] = pd.to_datetime(td_bank_report_df[td_bank_report_df.columns[0]]).dt.strftime('%m/%d/%Y')
+    except Exception as e:
+        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to the date\n\nDo you want to continue anyway?")
+
+        if not rsp:
+            clean(False)
+            return
+
+    #Hacemos la misma columna de tipo float
+    try:
+        td_bank_report_df[td_bank_report_df.columns[1]] = td_bank_report_df[td_bank_report_df.columns[1]].astype(str)
+    except Exception as e:
+
+        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to account number \n\nDo you want to continue anyway?")
+
+        if not rsp:
+            clean(False)
+            return
+    try:
+        td_bank_report_df[td_bank_report_df.columns[2]] = td_bank_report_df[td_bank_report_df.columns[2]].astype(str)
+    except Exception as e:
+        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction number \n\nDo you want to continue anyway?")
+
+        if not rsp:
+            clean(False)
+            return
+        
+    try:
+        td_bank_report_df[td_bank_report_df.columns[4]] = td_bank_report_df[td_bank_report_df.columns[4]].astype(float)
+    except Exception as e:
+        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction amount \n\nDo you want to continue anyway?")
+
+        if not rsp:
+            clean(False)
+            return
+
+    #Eliminar simbolos de la columna nombres, exceptuando los espacios
+    td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].replace(r'[^a-zA-Z0-9\s]', '', regex=True)
+    #Cortamos los nombres hasta un maximo de 30 caracteres
+    td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].str.slice(0, 30)
+    
+    result_file_name_xlsx = f"APDC {today}.xlsx"
+    result_file_name_csv = f"APDC {today}.csv"
+
+    retry = True
+    while retry:
+        try:
+            # Crear el objeto ExcelWriter con el formato deseado
+            writer = pd.ExcelWriter(result_file_name_xlsx, engine='xlsxwriter', date_format= "mm/dd/yyy")
+            td_bank_report_df.to_excel(writer, sheet_name="Sheet1", index=False,header=None)
+
+            retry = False
+        except PermissionError:
+            retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_xlsx}' is open\n\nIf that is the case please close the file and try again")
+            if not retry:
+                clean(False)
+                return
+        except Exception as e:
+            messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_xlsx}")
+
+            clean(False)
+            return
+
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,"Exporting resulting file")
+
+    retry = True
+    while retry:
+        try:
+            # Convert the dataframe to an XlsxWriter Excel object.
+            td_bank_report_df.to_csv(result_file_name_csv,index=False,header=None, date_format='%m/%d/%Y', float_format='%.2f')
+
+            retry = False
+        except PermissionError:
+            retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_csv}' is open\n\nIf that is the case please close the file and try again")
+            if not retry:
+                clean(False)
+                return
+        except Exception as e:
+            messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_csv}")
+
+            clean(False)
+            return
+    # Get the xlsxwriter workbook and worksheet objects.
+    workbook = writer.book
+    worksheet = writer.sheets["Sheet1"]
+
+    # Agregar algunos formatos de celda.
+    format1 = workbook.add_format({"num_format": "#,##0.00"})
+
+    # Aplicar los formatos a las columnas específicas.
+    worksheet.set_column('E:E', None, format1)  
+
+    # Cerrar el escritor de Excel de Pandas y guardar el archivo Excel.
+    writer.close()
+
+
+    #TODO FORMAT
+    ############################ UPDATING TRANSACTIONS HISTORY FILE
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,f"Updating {transactions_history_name}")
 
-    for account, df in transactions_for_account_df_list.items():
+    for account, df in transactions_for_account_df_dic.items():
         try:
             #Accedemos a la hoja de la cuenta a procesar
             transactions_history_workbook_page = transactions_history_workbook[account]
@@ -343,7 +530,7 @@ def process():
             messagebox.showwarning("Warning", f"Account {account} will not be updated on {transactions_history_name}")
             continue
     
-
+    ################################## SAVE TRANSACTION HISTORY FILE
     process_approved = False
     while(not process_approved and retry):
         
@@ -378,193 +565,16 @@ def process():
 
     #Ocultamos barra de progreso
     toggle_progress_bar(False)
+
     execution_in_progress = False
-    sys.exit()
+    ################################## END 
 
 
 
 
 
-
-
-
-    #Eliminamos filas que no contengan numero de cheque
-    indice_columna_numero_transaccion_qb_report = 1
-
-    # Eliminar las filas con valores nulos en la columna especificada
-    qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
-
-    # qb_report_df.to_excel("TEST.xlsx",index=None,header=None)
-
-    ############### Cambiamos de posicion las columnas
-
-    #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Sorting data")
-
-    ### Movemos la columna de numero de cuenta
-    position = 1  # Índice de la posición deseada
-    columns = qb_report_df.columns.tolist()
-    column_to_move = columns[4]  # Índice de la columna que deseas mover 
-    columns.remove(column_to_move)
-    columns.insert(position, column_to_move)
-    qb_report_df = qb_report_df[columns]
-    ### Insertamos columna con la letra I
-    qb_report_df.insert(3, '', 'I')
-    ### Movemos la columna de monto
-    position = 4  # Índice de la posición deseada
-    columns = qb_report_df.columns.tolist()
-    column_to_move = columns[5]  # Índice de la columna que deseas mover 
-    columns.remove(column_to_move)
-    columns.insert(position, column_to_move)
-    qb_report_df = qb_report_df[columns]
-
-    # Extraemos transacciones sin monto (void)
-    transaction_amount_column = 4
-    void_transactions = qb_report_df.loc[qb_report_df[qb_report_df.columns[transaction_amount_column]].isnull()]
-
-    #Eliminamos las transacciones en las que el monto sea vacio (void)
-    qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[transaction_amount_column]])
-
-    try:
-        #Le damos formato a las fechas del dataframe de las transacciones void
-        void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
-
-    except Exception as e:
-        pass
-
-    void_transactions_name_file = f"VOID TRANSACTIONS {today}.xlsx"
-
-    try_again = True
-    while try_again:  
-        try:
-            #Guardamos las transacciones void en un archivo aparte
-            if(not void_transactions.empty):
-
-                void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
-                print(f"Void transactions file has been created\n")
-
-            try_again = False
-        except PermissionError:
-            
-            rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
-
-            if not rsp:
-                clean(False)
-                return
-        except Exception as e:
-            messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
-            #Ocultamos barra de progreso y limpiamos caja de texto
-            clean(False)
-            return
-    
-    ######## Formato especifico a los datos
-
-    #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Assigning data format and conditions")
-
-    # Convertir las columnas a tipo de datos de fecha
-    try:
-        qb_report_df[qb_report_df.columns[0]] = pd.to_datetime(qb_report_df[qb_report_df.columns[0]]).dt.strftime('%m/%d/%Y')
-    except Exception as e:
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to the date\n\nDo you want to continue anyway?")
-
-        if not rsp:
-            clean(False)
-            return
-
-    #Hacemos la misma columna de tipo float
-    try:
-        qb_report_df[qb_report_df.columns[1]] = qb_report_df[qb_report_df.columns[1]].astype(str)
-    except Exception as e:
-
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to account number \n\nDo you want to continue anyway?")
-
-        if not rsp:
-            clean(False)
-            return
-    try:
-        qb_report_df[qb_report_df.columns[2]] = qb_report_df[qb_report_df.columns[2]].astype(str)
-    except Exception as e:
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction number \n\nDo you want to continue anyway?")
-
-        if not rsp:
-            clean(False)
-            return
-        
-    try:
-        qb_report_df[qb_report_df.columns[4]] = qb_report_df[qb_report_df.columns[4]].astype(float)
-    except Exception as e:
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction amount \n\nDo you want to continue anyway?")
-
-        if not rsp:
-            clean(False)
-            return
-
-    #Eliminar simbolos de la columna nombres, exceptuando los espacios
-    qb_report_df[qb_report_df.columns[5]] = qb_report_df[qb_report_df.columns[5]].replace(r'[^a-zA-Z0-9\s]', '', regex=True)
-    #Cortamos los nombres hasta un maximo de 30 caracteres
-    qb_report_df[qb_report_df.columns[5]] = qb_report_df[qb_report_df.columns[5]].str.slice(0, 30)
-    
-    result_file_name_xlsx = f"APDC {today}.xlsx"
-    result_file_name_csv = f"APDC {today}.csv"
-
-    retry = True
-    while retry:
-        try:
-            # Crear el objeto ExcelWriter con el formato deseado
-            writer = pd.ExcelWriter(result_file_name_xlsx, engine='xlsxwriter', date_format= "mm/dd/yyy")
-            qb_report_df.to_excel(writer, sheet_name="Sheet1", index=False,header=None)
-
-            retry = False
-        except PermissionError:
-            retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_xlsx}' is open\n\nIf that is the case please close the file and try again")
-            if not retry:
-                clean(False)
-                return
-        except Exception as e:
-            messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_xlsx}")
-
-            clean(False)
-            return
-
-    #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Exporting resulting file")
-
-    retry = True
-    while retry:
-        try:
-            # Convert the dataframe to an XlsxWriter Excel object.
-            qb_report_df.to_csv(result_file_name_csv,index=False,header=None, date_format='%m/%d/%Y', float_format='%.2f')
-
-            retry = False
-        except PermissionError:
-            retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_csv}' is open\n\nIf that is the case please close the file and try again")
-            if not retry:
-                clean(False)
-                return
-        except Exception as e:
-            messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_csv}")
-
-            clean(False)
-            return
-    # Get the xlsxwriter workbook and worksheet objects.
-    workbook = writer.book
-    worksheet = writer.sheets["Sheet1"]
-
-    # Agregar algunos formatos de celda.
-    format1 = workbook.add_format({"num_format": "#,##0.00"})
-
-    # Aplicar los formatos a las columnas específicas.
-    worksheet.set_column('E:E', None, format1)  
-
-    # Cerrar el escritor de Excel de Pandas y guardar el archivo Excel.
-    writer.close()
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Ending process")
-    # qb_report_df.to_excel("TEST.xlsx", index=False, header=None, float_format='%.2f')
-    # qb_report_df.to_excel(writer, index=False, header=None, float_format='%.2f')
-    #Actualizamos label barra de progreso
-    #Reiniciamos barra de progreso
     time.sleep(0.5)
     toggle_progress_bar()
     messagebox.showinfo("Sucess", "The process has finished successfully")
