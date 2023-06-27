@@ -152,7 +152,7 @@ def process():
     # Verificacion de formato transactions history file
     try:
         #Esto cargará todas las hojas del archivo Excel en un diccionario llamado transactions_history_df, donde las claves del diccionario serán los nombres de las hojas y los valores serán los DataFrames correspondientes
-        transactions_history_df = pd.read_excel(input_transactions_history, sheet_name=None)           
+        transactions_history_df_dic = pd.read_excel(input_transactions_history, sheet_name=None)           
 
     except:
         messagebox.showerror("Error", "'" + transactions_history_name + "' is not in the correct format. \n\nIt is necessary that the sheet where the report is located has the name 'Sheet1'. \n\nPlease check the Quickbooks report and try again")
@@ -168,14 +168,14 @@ def process():
         clean(clean_inputs=False)
         return
 
-    #Diccionario para guardar el ultimo numero de transaccion procesado por cada cuenta
-    last_transaction_processed_by_account = {}
+    # #Diccionario para guardar el ultimo numero de transaccion procesado por cada cuenta
+    # last_transaction_processed_by_account = {}
 
     ########Recorremos el data frame de el historial de transacciones con todas las hojas y extraemos la ultima fila junto con la celda especifica que tiene el numero de transaccion
-    for account_number, df_page in transactions_history_df.items():
-        last_row = df_page.tail(1)
-        transaction_number = last_row.iloc[0, 2]  # Obtener el valor de la columna 2
-        last_transaction_processed_by_account[account_number] = transaction_number
+    # for account_number, df_page in transactions_history_df.items():
+    #     last_row = df_page.tail(1)
+    #     transaction_number = last_row.iloc[0, 2]  # Obtener el valor de la columna 2
+    #     last_transaction_processed_by_account[account_number] = transaction_number
 
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Deleting unnecessary data")
@@ -233,7 +233,7 @@ def process():
     # Eliminar las filas con valores nulos en la columna especificada
     qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
 
-    transactions_for_account_df_dic = {}
+    qb_report_df_dic = {}
     ############## Insertar una nueva columna llamada 'tmp' y asignar valores según los rangos, agrega el rango desde uno menos del inicio hasta uno menos del final
     #Ordenar las transacciones de cada cuenta
     for i in range(int(len(account_range_limit) / 2)):
@@ -244,82 +244,66 @@ def process():
 
         qb_report_df.loc[start_index:end_index, 'tmp'] = "439780" + account_number
 
-        # #Ordenamos las transacciones de cada cuenta
-        # qb_report_df.loc[start_index:end_index, :] = qb_report_df.loc[start_index:end_index, :].sort_values(by=[qb_report_df.columns[1]], axis=0)
-
         #Exportamos cada dataframe hacia un diccionario
-        transactions_for_account_df_dic[account_number] = qb_report_df.loc[start_index:end_index, :]
-        # Obtener las filas desde el valor buscado hacia abajo
-        # qb_report_df = qb_report_df.loc[qb_report_df.index[0]:]
-
-        # # Eliminar las filas desde el inicio hasta el índice encontrado
-        # df = df.drop(df.index[:indice])
-    
-    accounts_no_data = []
-    for key, df in transactions_for_account_df_dic.items():
+        qb_report_df_dic[account_number] = qb_report_df.loc[start_index:end_index, :]
         
-        #Reseteamos los indices de las columnas
-        # value.columns = range(value.shape[1])
-
-        #Ordenamos las transacciones de cada cuenta
-        df = df.sort_values(by=[df.columns[1]], axis=0)
-
         #Reseteamos los indices de las filas
-        df = df.reset_index(drop=True)
+        qb_report_df_dic[account_number] = qb_report_df_dic[account_number].reset_index(drop=True)
+        #Reseteamos los indices de las columnas
+        qb_report_df_dic[account_number].columns = range(qb_report_df_dic[account_number].shape[1])
 
-        # Buscar el dato específico y obtener el índice (2 porque tiene una columna con los indices de las filas)
-        df_coincidences = df[df[df.columns[1]] == int(last_transaction_processed_by_account[key])]
+    ###############Busqueda y comparacion de transacciones para hallar nuevas transacciones a verificar
+    accounts_no_processed = []
+    transactions_per_account_to_verify = {}
+    for account, transaction_history_df in transactions_history_df_dic.items():
         
-        if df_coincidences.empty:
-            #TODO Cambiar por hacer una lista de las cuentas no procesadas e informar al final del proceso
-            messagebox.showinfo("No matches found",f"There is no data to process for account {key}")
-
-            #Pasamos un dataframe vacio
-            transactions_for_account_df_dic[key] = pd.DataFrame()
-
-            #Lo agregamos como cuenta sin datos
-            accounts_no_data.append(key)
-        else:
-            #Extraemos el indice de la fila coincidente
-            coincidence_index = df_coincidences.index[0]
-
-            # Eliminar las filas desde el inicio hasta uno despues del índice encontrado
-            df_result = df.drop(df.index[:coincidence_index + 1])
+        #Verificamos si en nuestro reporte de qb tiene transacciones de la cuenta a procesar
+        if account in qb_report_df_dic:
+            qb_report_df = qb_report_df_dic[account]
             
-            if df_result.empty:
+            #Reseteamos los indices de las columnas
+            transactions_history_df_dic[account].columns = range(transactions_history_df_dic[account].shape[1])
 
-                #TODO Cambiar por hacer una lista de las cuentas no procesadas e informar al final del proceso
-                messagebox.showinfo("No data",f"There is no data to process for account {key}")
-                
-                #Pasamos un dataframe vacio
-                transactions_for_account_df_dic[key] = pd.DataFrame()
+            ###Le damos a la columna a comparar formato entero para que se realice correctamente la comparacion
+            transactions_history_df_dic[account][transactions_history_df_dic[account].columns[2]] = transaction_history_df[transaction_history_df.columns[2]].astype(int)
+            qb_report_df[qb_report_df.columns[1]] = qb_report_df[qb_report_df.columns[1]].astype(int)
 
-                #Lo agregamos como cuenta sin datos
-                accounts_no_data.append(key)
+            #Realizamos merge tomando solamente los datos del df de la izq
+            transactions_merge = pd.merge(qb_report_df, transaction_history_df, left_on=qb_report_df.columns[1], right_on=transaction_history_df.columns[2], how="left", sort=True, indicator=True)
+
+            #Filtramos el merge para tener solo las transacciones que no tuvieron coincidencia (transacciones nuevas a verificar)
+            transactions_merge_filtered = transactions_merge[transactions_merge['_merge'] == 'left_only']
+            
+            #Puede pasar que el qb report si tenga transacciones pero que ninguna sea nueva
+            if transactions_merge_filtered.empty:
+                #Guardamos las cuentas que no tienen transacciones nuevas
+                accounts_no_processed.append(account)
             else:
-                transactions_for_account_df_dic[key] = df_result
-            # df.to_excel("TEST.xlsx")
+                ###Guardamos los dataframes de cada cuenta con sus transacciones a verificar
 
-    for account in accounts_no_data:
-        #Borramos el elemento sin coincidencias del diccionario
-        del transactions_for_account_df_dic[account]
+                #Reseteamos los indices de las filas
+                transactions_merge_filtered = transactions_merge_filtered.reset_index(drop=True)
+                #Reseteamos los indices de las columnas
+                transactions_merge_filtered.columns = range(transactions_merge_filtered.shape[1])
+                
+                #Eliminamos la columna que tiene el numero de transaccion duplicado
+                transactions_merge_filtered = transactions_merge_filtered.drop([0],axis=1)
 
+                #Eliminamos columnas innecesarias que me deja el merge
+                index_to_remove_from = 4 #A partir del este numero se eliminaran
+
+                if transactions_merge_filtered.shape[1] > index_to_remove_from:
+                    transactions_merge_filtered = transactions_merge_filtered.drop(transactions_merge_filtered.columns[index_to_remove_from + 1:], axis=1)
+
+                transactions_per_account_to_verify[account] = transactions_merge_filtered
+        else: 
+            #Guardamos las cuentas que no tienen transacciones en el qb report
+            accounts_no_processed.append(account)
 
     # Concatenar los DataFrames del diccionario en uno solo
-    td_bank_report_df = pd.concat(transactions_for_account_df_dic.values(), ignore_index=True)
+    td_bank_report_df = pd.concat(transactions_per_account_to_verify.values(), ignore_index=True)
 
-    # execution_in_progress = False
-    # sys.exit()
-
-    
-
-
-    
-
-    # qb_report_df.to_excel("TEST.xlsx",index=None,header=None)
-
-    ######################## Format TD BANK REPORT
-
+    ############################# Format TD BANK REPORT
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Sorting data")
 
@@ -488,7 +472,7 @@ def process():
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,f"Updating {transactions_history_name}")
 
-    for account, df in transactions_for_account_df_dic.items():
+    for account, df in transactions_per_account_to_verify.items():
         try:
             #Accedemos a la hoja de la cuenta a procesar
             transactions_history_workbook_page = transactions_history_workbook[account]
