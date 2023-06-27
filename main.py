@@ -7,6 +7,9 @@ import threading
 import pandas as pd
 import time
 from datetime import datetime
+from openpyxl import load_workbook
+
+OUTPUT_DIRECTORY = "OUTPUT"
 
 today = str(datetime.now().strftime("%m%d%Y %p%#I"))
 
@@ -34,8 +37,8 @@ def abrir_quickbooks_report():
 def abrir_historial_de_transacciones_file():
     archivo = filedialog.askopenfilename(title="Select transactions history file", filetypes=[("Archivos XLSX", "*.xlsx")])
     if archivo:
-        entrada_quickbooks_report.delete(0, tk.END)
-        entrada_quickbooks_report.insert(0, archivo)
+        entrada_historial_de_transacciones_file.delete(0, tk.END)
+        entrada_historial_de_transacciones_file.insert(0, archivo)
 
 def clean(clean_inputs = True):
     caja_texto.delete(1.0, tk.END)
@@ -156,6 +159,23 @@ def process():
         clean(clean_inputs=False)
         return
     
+    try:
+        #Accedemos al archivo con el historial de transacciones
+        transactions_history_workbook = load_workbook(filename = input_transactions_history)
+    except:
+        messagebox.showerror("Error",f"Could not access file {input_transactions_history} \nMake sure you have selected the correct file")
+
+        clean(clean_inputs=False)
+        return
+
+    #Diccionario para guardar el ultimo numero de transaccion procesado por cada cuenta
+    last_transaction_processed_by_account = {}
+
+    ########Recorremos el data frame de el historial de transacciones con todas las hojas y extraemos la ultima fila junto con la celda especifica que tiene el numero de transaccion
+    for account_number, df_page in transactions_history_df.items():
+        last_row = df_page.tail(1)
+        transaction_number = last_row.iloc[0, 2]  # Obtener el valor de la columna 2
+        last_transaction_processed_by_account[account_number] = transaction_number
 
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Deleting unnecessary data")
@@ -164,8 +184,6 @@ def process():
     account_range_limit = qb_report_df.iloc[:,[1,10]].dropna(subset=qb_report_df.columns[1])
     #Extraemos las filas que tengan las celda de la columna 10 vacia
     # account_range_limit = account_range_limit[account_range_limit[10].isna()]
-
-    #TODO crear lista de cuentas a buscar en lista actualizada
 
     ############### Eliminar columnas vacias y extras
     columnas_a_eliminar_qb_report = [0,1,2,3,5,7,9]  # Índices de las columnas a eliminar
@@ -199,11 +217,176 @@ def process():
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Inserting column with account numbers")
 
+    try:
+        qb_report_df[qb_report_df.columns[1]] = qb_report_df[qb_report_df.columns[1]].astype(int)
+    except Exception as e:
+
+        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to account number \n\nDo you want to continue anyway?")
+
+        if not rsp:
+            clean(False)
+            return
+    
+    transactions_for_account_df_list = {}
     ############## Insertar una nueva columna llamada 'tmp' y asignar valores según los rangos, agrega el rango desde uno menos del inicio hasta uno menos del final
-    ######################################AQUI VOY A REALIZAR EL ORDENAMIENTO Y EL FILTRADO POR CADA CUENTA
+    #Ordenar las transacciones de cada cuenta
     for i in range(int(len(account_range_limit) / 2)):
-        index = i + 1
-        qb_report_df.loc[account_range_limit.index[i * 2]:(account_range_limit.index[(i * 2) + 1]), 'tmp'] = "439780" + str(account_range_limit.iat[i * 2, 0])[:4]
+
+        start_index = account_range_limit.index[i * 2]
+        end_index = (account_range_limit.index[(i * 2) + 1])
+        account_number = str(account_range_limit.iat[i * 2, 0])[:4]
+
+        qb_report_df.loc[start_index:end_index, 'tmp'] = "439780" + account_number
+
+        # #Ordenamos las transacciones de cada cuenta
+        # qb_report_df.loc[start_index:end_index, :] = qb_report_df.loc[start_index:end_index, :].sort_values(by=[qb_report_df.columns[1]], axis=0)
+
+        #Exportamos cada dataframe hacia un diccionario
+        transactions_for_account_df_list[account_number] = qb_report_df.loc[start_index:end_index, :]
+        # Obtener las filas desde el valor buscado hacia abajo
+        # qb_report_df = qb_report_df.loc[qb_report_df.index[0]:]
+
+        # # Eliminar las filas desde el inicio hasta el índice encontrado
+        # df = df.drop(df.index[:indice])
+    
+    accounts_no_data = []
+    for key, df in transactions_for_account_df_list.items():
+        
+        #Reseteamos los indices de las columnas
+        # value.columns = range(value.shape[1])
+
+        #Ordenamos las transacciones de cada cuenta
+        df = df.sort_values(by=[df.columns[1]], axis=0)
+
+        #Reseteamos los indices de las filas
+        df = df.reset_index(drop=True)
+
+        # Buscar el dato específico y obtener el índice (2 porque tiene una columna con los indices de las filas)
+        df_coincidences = df[df[df.columns[1]] == int(last_transaction_processed_by_account[key])]
+        
+        if df_coincidences.empty:
+            #TODO Cambiar por hacer una lista de las cuentas no procesadas e informar al final del proceso
+            messagebox.showinfo("No matches found",f"There is no data to process for account {key}")
+
+            #Pasamos un dataframe vacio
+            transactions_for_account_df_list[key] = pd.DataFrame()
+
+            #Lo agregamos como cuenta sin datos
+            accounts_no_data.append(key)
+        else:
+            #Extraemos el indice de la fila coincidente
+            coincidence_index = df_coincidences.index[0]
+
+            # Eliminar las filas desde el inicio hasta uno despues del índice encontrado
+            df_result = df.drop(df.index[:coincidence_index + 1])
+            
+            if df_result.empty:
+
+                #TODO Cambiar por hacer una lista de las cuentas no procesadas e informar al final del proceso
+                messagebox.showinfo("No data",f"There is no data to process for account {key}")
+                
+                #Pasamos un dataframe vacio
+                transactions_for_account_df_list[key] = pd.DataFrame()
+
+                #Lo agregamos como cuenta sin datos
+                accounts_no_data.append(key)
+            else:
+                transactions_for_account_df_list[key] = df_result
+            # df.to_excel("TEST.xlsx")
+
+    for account in accounts_no_data:
+        #Borramos el elemento sin coincidencias del diccionario
+        del transactions_for_account_df_list[account]
+
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,f"Updating {transactions_history_name}")
+
+    for account, df in transactions_for_account_df_list.items():
+        try:
+            #Accedemos a la hoja de la cuenta a procesar
+            transactions_history_workbook_page = transactions_history_workbook[account]
+        except KeyError:
+            messagebox.showerror("Error", "Page '" + account + "' not found in '" + transactions_history_name + "'\n\nPlease verify that '" + transactions_history_name + "' contains '" + account + "' sheet")
+            #Ocultamos barra de progreso y limpiamos caja de texto
+            clean(False)
+            return
+        except Exception as e:
+            messagebox.showerror("Error", f"{e}\n\nPlease check {transactions_history_name} and {account} sheet")
+            #Ocultamos barra de progreso y limpiamos caja de texto
+            clean(False)
+            return
+        
+        #Pasamos la informacion del dataframe () a una lista
+        data_frame_rows = df.values.tolist()
+
+        #Proceso de insercion de los datos al page del workbook
+        process_approved = False
+        retry = True
+        while(not process_approved and retry):
+
+            try:
+                for row in data_frame_rows:
+                    transactions_history_workbook_page.append(row)
+
+
+                process_approved = True
+                
+            except PermissionError:
+
+                retry = messagebox.askretrycancel("Error inserting verified transactions", f"Could not access file {transactions_history_name} \nIt is probably open \n\nDo you want to try again?")
+
+            except Exception as e:
+                
+                retry = messagebox.askretrycancel("Error", f"{e}\n\nPlease check {transactions_history_name}\n\nDo you want to try again?")
+    
+        if not retry:
+            messagebox.showwarning("Warning", f"Account {account} will not be updated on {transactions_history_name}")
+            continue
+    
+
+    process_approved = False
+    while(not process_approved and retry):
+        
+        #Acutalizamos barra de progreso
+        update_progress_bar(1,format_report_total_task,f"Saving {transactions_history_name}")
+        #Reiniciamos barra de progreso
+        barra_progreso["value"] = 0   
+        ventana.update_idletasks()
+
+        time.sleep(1)
+        #Reiniciamos barra de progreso
+        barra_progreso["value"] = 50   
+        ventana.update_idletasks()
+
+        try:
+            transactions_history_workbook.save(input_transactions_history)
+            
+            process_approved = True
+        except PermissionError:
+
+            retry = messagebox.askretrycancel("Error saving file", f"Could not access file {transactions_history_name} \nIt is probably open \n\nDo you want to try again?")
+
+        except Exception as e:
+
+            retry = messagebox.askretrycancel("Error", f"{e}\n\nPlease check {transactions_history_name}\n\nDo you want to try again?")
+
+    #Reiniciamos barra de progreso
+    barra_progreso["value"] = 100   
+    ventana.update_idletasks()
+
+    time.sleep(1)
+
+    #Ocultamos barra de progreso
+    toggle_progress_bar(False)
+    execution_in_progress = False
+    sys.exit()
+
+
+
+
+
+
+
 
     #Eliminamos filas que no contengan numero de cheque
     indice_columna_numero_transaccion_qb_report = 1
@@ -211,11 +394,7 @@ def process():
     # Eliminar las filas con valores nulos en la columna especificada
     qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
 
-    print(account_range_limit)
-
-    qb_report_df.to_excel("TEST.xlsx",index=None,header=None)
-
-    sys.exit()
+    # qb_report_df.to_excel("TEST.xlsx",index=None,header=None)
 
     ############### Cambiamos de posicion las columnas
 
