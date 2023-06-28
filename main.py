@@ -66,10 +66,6 @@ def toggle_progress_bar(band=False, label = ""):
     
     ventana.update_idletasks()
 
-#TODO
-def show_info_Quickbooks_report():
-     messagebox.showinfo("Info", "Select the report files extracted from Quickbooks with check transactions\n\nEach file must represent an account, which will be searched in the TD Bank transactions report\n\nThis version uses the report extracted from Quickbooks Reports - Memorized Reports - Check Positive Pay")
-
 def update_progress_bar(value, total_tasks, label = ""):
 
     #Actualizamos el label de la barra de progreso    
@@ -145,7 +141,7 @@ def process():
             clean(clean_inputs=False)
             return
     except:
-        messagebox.showerror("Error", "It is not possible to access the information of the Quickbooks report '" + quickbooks_report_name + "' \n\nPlease check the Quickbooks report and try again")
+        messagebox.showerror("Error", "It is not possible to access the information of the Quickbooks report '" + quickbooks_report_name + "' \n\nPlease check the format of Quickbooks report and try again")
         clean(False)
         return
     
@@ -155,7 +151,7 @@ def process():
         transactions_history_df_dic = pd.read_excel(input_transactions_history, sheet_name=None)           
 
     except:
-        messagebox.showerror("Error", "'" + transactions_history_name + "' is not in the correct format. \n\nIt is necessary that the sheet where the report is located has the name 'Sheet1'. \n\nPlease check the Quickbooks report and try again")
+        messagebox.showerror("Error", "There is a problem with '" + transactions_history_name + "'. \n\nPlease verify that you have selected the correct file and try again")
         clean(clean_inputs=False)
         return
     
@@ -163,7 +159,7 @@ def process():
         #Accedemos al archivo con el historial de transacciones
         transactions_history_workbook = load_workbook(filename = input_transactions_history)
     except:
-        messagebox.showerror("Error",f"Could not access file {input_transactions_history} \nMake sure you have selected the correct file")
+        messagebox.showerror("Error",f"Could not access file {transactions_history_name} \nMake sure you have selected the correct file")
 
         clean(clean_inputs=False)
         return
@@ -242,6 +238,7 @@ def process():
     ###############Busqueda y comparacion de transacciones para hallar nuevas transacciones a verificar
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Looking for transactions to verify")
+
     accounts_no_processed = []
     transactions_per_account_to_verify = {}
     for account, transaction_history_df in transactions_history_df_dic.items():
@@ -266,7 +263,7 @@ def process():
             #Puede pasar que el qb report si tenga transacciones pero que ninguna sea nueva
             if transactions_merge_filtered.empty:
                 #Guardamos las cuentas que no tienen transacciones nuevas
-                accounts_no_processed.append(account)
+                accounts_no_processed.append(account + " - Has no new transactions to verify")
             else:
                 ###Guardamos los dataframes de cada cuenta con sus transacciones a verificar
                 ###Aplicamos formato comun para archivo salida y datos a insertar
@@ -324,138 +321,142 @@ def process():
                 transactions_per_account_to_verify[account] = transactions_merge_filtered
         else: 
             #Guardamos las cuentas que no tienen transacciones en el qb report
-            accounts_no_processed.append(account)
-
-    # Concatenar los DataFrames del diccionario en uno solo
-    td_bank_report_df = pd.concat(transactions_per_account_to_verify.values(), ignore_index=True)
+            accounts_no_processed.append(account + " - Not found in the Check Positive Pay report")
 
     ############################# Format TD BANK REPORT
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Formatting TD Bank report")
 
-    ### Insertamos columna con la letra I
-    td_bank_report_df.insert(3, '', 'I')
+    #Verificamos que hayan transacciones nuevas por verificar
+    if len(transactions_per_account_to_verify) > 0:
+        # Concatenar los DataFrames del diccionario en uno solo
+        td_bank_report_df = pd.concat(transactions_per_account_to_verify.values(), ignore_index=True)
 
-    try:
-        #Le damos formato a las fechas del dataframe de las transacciones void
-        void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
+        ### Insertamos columna con la letra I
+        td_bank_report_df.insert(3, '', 'I')
 
-    except Exception as e:
-        pass
-
-    void_transactions_name_file = f"VOID TRANSACTIONS {timestamp}.xlsx"
-
-    try_again = True
-    while try_again:  
         try:
-            #Guardamos las transacciones void en un archivo aparte
-            if(not void_transactions.empty):
+            #Le damos formato a las fechas del dataframe de las transacciones void
+            void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
 
-                void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
-                print(f"Void transactions file has been created\n")
+        except Exception as e:
+            pass
 
-            try_again = False
-        except PermissionError:
-            
-            rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
+        void_transactions_name_file = f"VOID TRANSACTIONS {timestamp}.xlsx"
+
+        try_again = True
+        while try_again:  
+            try:
+                #Guardamos las transacciones void en un archivo aparte
+                if(not void_transactions.empty):
+
+                    void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
+                    print(f"Void transactions file has been created\n")
+
+                try_again = False
+            except PermissionError:
+                
+                rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
+
+                if not rsp:
+                    clean(False)
+                    return
+            except Exception as e:
+                messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
+                #Ocultamos barra de progreso y limpiamos caja de texto
+                clean(False)
+                return
+        
+        ######## Formato especifico a los datos
+        ####Formato tipo de datos
+        try:
+            td_bank_report_df[td_bank_report_df.columns[1]] = td_bank_report_df[td_bank_report_df.columns[1]].astype(str)
+        except Exception as e:
+
+            rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to account number \n\nDo you want to continue anyway?")
 
             if not rsp:
                 clean(False)
                 return
+        try:
+            td_bank_report_df[td_bank_report_df.columns[2]] = td_bank_report_df[td_bank_report_df.columns[2]].astype(str)
         except Exception as e:
-            messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
-            #Ocultamos barra de progreso y limpiamos caja de texto
-            clean(False)
-            return
-    
-    ######## Formato especifico a los datos
-    ####Formato tipo de datos
-    try:
-        td_bank_report_df[td_bank_report_df.columns[1]] = td_bank_report_df[td_bank_report_df.columns[1]].astype(str)
-    except Exception as e:
+            rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction number \n\nDo you want to continue anyway?")
 
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to account number \n\nDo you want to continue anyway?")
+            if not rsp:
+                clean(False)
+                return
+            
+        try:
+            td_bank_report_df[td_bank_report_df.columns[4]] = td_bank_report_df[td_bank_report_df.columns[4]].astype(float)
+        except Exception as e:
+            rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction amount \n\nDo you want to continue anyway?")
 
-        if not rsp:
-            clean(False)
-            return
-    try:
-        td_bank_report_df[td_bank_report_df.columns[2]] = td_bank_report_df[td_bank_report_df.columns[2]].astype(str)
-    except Exception as e:
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction number \n\nDo you want to continue anyway?")
+            if not rsp:
+                clean(False)
+                return
 
-        if not rsp:
-            clean(False)
-            return
+        #Eliminar simbolos de la columna nombres, exceptuando los espacios
+        td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].replace(r'[^a-zA-Z0-9\s]', '', regex=True)
+        #Cortamos los nombres hasta un maximo de 30 caracteres
+        td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].str.slice(0, 30)
         
-    try:
-        td_bank_report_df[td_bank_report_df.columns[4]] = td_bank_report_df[td_bank_report_df.columns[4]].astype(float)
-    except Exception as e:
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to transaction amount \n\nDo you want to continue anyway?")
+        #Acutalizamos barra de progreso
+        update_progress_bar(1,format_report_total_task,"Saving TD Bank report")
+        
+        result_file_name_xlsx = f"APDC {timestamp}.xlsx"
+        result_file_name_csv = f"APDC {timestamp}.csv"
 
-        if not rsp:
-            clean(False)
-            return
+        retry = True
+        while retry:
+            try:
+                # Crear el objeto ExcelWriter con el formato deseado
+                writer = pd.ExcelWriter(result_file_name_xlsx, engine='xlsxwriter', date_format= "mm/dd/yyy")
+                td_bank_report_df.to_excel(writer, sheet_name="Sheet1", index=False,header=None)
 
-    #Eliminar simbolos de la columna nombres, exceptuando los espacios
-    td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].replace(r'[^a-zA-Z0-9\s]', '', regex=True)
-    #Cortamos los nombres hasta un maximo de 30 caracteres
-    td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].str.slice(0, 30)
-    
-    #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Saving TD Bank report")
-    
-    result_file_name_xlsx = f"APDC {timestamp}.xlsx"
-    result_file_name_csv = f"APDC {timestamp}.csv"
+                retry = False
+            except PermissionError:
+                retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_xlsx}' is open\n\nIf that is the case please close the file and try again")
+                if not retry:
+                    clean(False)
+                    return
+            except Exception as e:
+                messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_xlsx}")
 
-    retry = True
-    while retry:
-        try:
-            # Crear el objeto ExcelWriter con el formato deseado
-            writer = pd.ExcelWriter(result_file_name_xlsx, engine='xlsxwriter', date_format= "mm/dd/yyy")
-            td_bank_report_df.to_excel(writer, sheet_name="Sheet1", index=False,header=None)
-
-            retry = False
-        except PermissionError:
-            retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_xlsx}' is open\n\nIf that is the case please close the file and try again")
-            if not retry:
                 clean(False)
                 return
-        except Exception as e:
-            messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_xlsx}")
 
-            clean(False)
-            return
+        retry = True
+        while retry:
+            try:
+                # Convert the dataframe to an XlsxWriter Excel object.
+                td_bank_report_df.to_csv(result_file_name_csv,index=False,header=None, date_format='%m/%d/%Y', float_format='%.2f')
 
-    retry = True
-    while retry:
-        try:
-            # Convert the dataframe to an XlsxWriter Excel object.
-            td_bank_report_df.to_csv(result_file_name_csv,index=False,header=None, date_format='%m/%d/%Y', float_format='%.2f')
+                retry = False
+            except PermissionError:
+                retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_csv}' is open\n\nIf that is the case please close the file and try again")
+                if not retry:
+                    clean(False)
+                    return
+            except Exception as e:
+                messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_csv}")
 
-            retry = False
-        except PermissionError:
-            retry = messagebox.askretrycancel("Error", f"{PermissionError}\n\nProbably '{result_file_name_csv}' is open\n\nIf that is the case please close the file and try again")
-            if not retry:
                 clean(False)
                 return
-        except Exception as e:
-            messagebox.showerror("Error", f"{e}\n\nThere is a problem with {result_file_name_csv}")
+        # Get the xlsxwriter workbook and worksheet objects.
+        workbook = writer.book
+        worksheet = writer.sheets["Sheet1"]
 
-            clean(False)
-            return
-    # Get the xlsxwriter workbook and worksheet objects.
-    workbook = writer.book
-    worksheet = writer.sheets["Sheet1"]
+        # Agregar algunos formatos de celda.
+        format1 = workbook.add_format({"num_format": "#,##0.00"})
 
-    # Agregar algunos formatos de celda.
-    format1 = workbook.add_format({"num_format": "#,##0.00"})
+        # Aplicar los formatos a las columnas específicas.
+        worksheet.set_column('E:E', None, format1)  
 
-    # Aplicar los formatos a las columnas específicas.
-    worksheet.set_column('E:E', None, format1)  
-
-    # Cerrar el escritor de Excel de Pandas y guardar el archivo Excel.
-    writer.close()
+        # Cerrar el escritor de Excel de Pandas y guardar el archivo Excel.
+        writer.close()
+    else:
+        retry = False
 
     #Reiniciamos barra de progreso
     barra_progreso["value"] = 100   
@@ -535,13 +536,15 @@ def process():
             continue
     
     ################################## SAVE TRANSACTION HISTORY FILE
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,f"Saving {transactions_history_name}")
+    #Reiniciamos barra de progreso
+    barra_progreso["value"] = 0
+
     process_approved = False
+    #Con retry tambien verificamos si hay transcciones nuevas a verificar
     while(not process_approved and retry):
         
-        #Acutalizamos barra de progreso
-        update_progress_bar(1,format_report_total_task,f"Saving {transactions_history_name}")
-        #Reiniciamos barra de progreso
-
         time.sleep(1)
         #Reiniciamos barra de progreso
         barra_progreso["value"] = 50   
@@ -555,9 +558,14 @@ def process():
 
             retry = messagebox.askretrycancel("Error saving file", f"Could not access file {transactions_history_name} \nIt is probably open \n\nDo you want to try again?")
 
+            #Reiniciamos barra de progreso
+            barra_progreso["value"] = 0
         except Exception as e:
 
             retry = messagebox.askretrycancel("Error", f"{e}\n\nPlease check {transactions_history_name}\n\nDo you want to try again?")
+
+            #Reiniciamos barra de progreso
+            barra_progreso["value"] = 0
 
     #Reiniciamos barra de progreso
     barra_progreso["value"] = 100   
@@ -577,7 +585,17 @@ def process():
     update_progress_bar(1,format_report_total_task,"Ending process")
     time.sleep(0.5)
     toggle_progress_bar()
-    messagebox.showinfo("Sucess", "The process has finished successfully")
+
+    sucess_message = "The process has finished successfully"
+
+    if len(transactions_per_account_to_verify) > 0:
+        sucess_message = sucess_message + "\n\nUpdated accounts.\n" + "\n".join(str(elemento) for elemento in transactions_per_account_to_verify.keys())
+
+    if len(accounts_no_processed) > 0:
+        sucess_message = sucess_message + "\n\nUnprocessed accounts.\n" + "\n".join(str(elemento) for elemento in accounts_no_processed)
+
+    messagebox.showinfo("Sucess", sucess_message) 
+
 
 def run_thread():
 
@@ -608,7 +626,7 @@ entrada_quickbooks_report = tk.Entry(ventana, width=40)
 boton_quickbooks_report = tk.Button(ventana, text="Select file", command=abrir_quickbooks_report, font=("Arial", 10))
 # boton_info_quickbooks_report = tk.Button(ventana, text="Info", command=show_info_Quickbooks_report)
 
-subtitulo_historial_de_transacciones_file = tk.Label(ventana, text="Transaction History File", font=("Arial", 14))
+subtitulo_historial_de_transacciones_file = tk.Label(ventana, text="Verified Transaction History File", font=("Arial", 14))
 entrada_historial_de_transacciones_file = tk.Entry(ventana, width=40)
 boton_historial_de_transacciones_file = tk.Button(ventana, text="Select file", command=abrir_historial_de_transacciones_file, font=("Arial", 10))
 
