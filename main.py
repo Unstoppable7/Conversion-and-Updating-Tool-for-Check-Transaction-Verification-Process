@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 OUTPUT_DIRECTORY = "OUTPUT"
 
-today = str(datetime.now().strftime("%m%d%Y %p%#I"))
+timestamp = str(datetime.now().strftime("%m%d%Y %p%#I"))
 
 # Crear una clase personalizada para redirigir la salida a la caja de texto
 class TextRedirector:
@@ -234,6 +234,7 @@ def process():
     qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
 
     qb_report_df_dic = {}
+    void_transactions = pd.DataFrame()
     ############## Insertar una nueva columna llamada 'tmp' y asignar valores según los rangos, agrega el rango desde uno menos del inicio hasta uno menos del final
     #Ordenar las transacciones de cada cuenta
     for i in range(int(len(account_range_limit) / 2)):
@@ -280,6 +281,7 @@ def process():
                 accounts_no_processed.append(account)
             else:
                 ###Guardamos los dataframes de cada cuenta con sus transacciones a verificar
+                ###Aplicamos formato comun para archivo salida y datos a insertar
 
                 #Reseteamos los indices de las filas
                 transactions_merge_filtered = transactions_merge_filtered.reset_index(drop=True)
@@ -291,10 +293,46 @@ def process():
 
                 #Eliminamos columnas innecesarias que me deja el merge
                 index_to_remove_from = 4 #A partir del este numero se eliminaran
-
                 if transactions_merge_filtered.shape[1] > index_to_remove_from:
                     transactions_merge_filtered = transactions_merge_filtered.drop(transactions_merge_filtered.columns[index_to_remove_from + 1:], axis=1)
 
+                ##Formato comun
+
+                ### Movemos la columna de numero de cuenta
+                position = 1  # Índice de la posición deseada
+                columns = transactions_merge_filtered.columns.tolist()
+                column_to_move = columns[4]  # Índice de la columna que deseas mover 
+                columns.remove(column_to_move)
+                columns.insert(position, column_to_move)
+                transactions_merge_filtered = transactions_merge_filtered[columns]
+
+                ### Movemos la columna de monto
+                position = 3  # Índice de la posición deseada
+                columns = transactions_merge_filtered.columns.tolist()
+                column_to_move = columns[4]  # Índice de la columna que deseas mover 
+                columns.remove(column_to_move)
+                columns.insert(position, column_to_move)
+                transactions_merge_filtered = transactions_merge_filtered[columns]
+
+                
+                # Extraemos transacciones sin monto (void)
+                transaction_amount_column = 3
+                void_transactions = pd.concat([void_transactions, transactions_merge_filtered.loc[transactions_merge_filtered[transactions_merge_filtered.columns[transaction_amount_column]].isnull()]])
+
+                #Eliminamos las transacciones en las que el monto sea vacio (void)
+                transactions_merge_filtered = transactions_merge_filtered.dropna(subset=[transactions_merge_filtered.columns[transaction_amount_column]])
+
+                # Convertir las columnas a tipo de datos de fecha
+                try:
+                    transactions_merge_filtered[transactions_merge_filtered.columns[0]] = pd.to_datetime(transactions_merge_filtered[transactions_merge_filtered.columns[0]]).dt.strftime('%m/%d/%Y')
+                except Exception as e:
+                    rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to the date\n\nDo you want to continue anyway?")
+
+                    if not rsp:
+                        clean(False)
+                        return
+
+                #Agregamos resultado al diccionario
                 transactions_per_account_to_verify[account] = transactions_merge_filtered
         else: 
             #Guardamos las cuentas que no tienen transacciones en el qb report
@@ -307,29 +345,8 @@ def process():
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Sorting data")
 
-    ### Movemos la columna de numero de cuenta
-    position = 1  # Índice de la posición deseada
-    columns = td_bank_report_df.columns.tolist()
-    column_to_move = columns[4]  # Índice de la columna que deseas mover 
-    columns.remove(column_to_move)
-    columns.insert(position, column_to_move)
-    td_bank_report_df = td_bank_report_df[columns]
     ### Insertamos columna con la letra I
     td_bank_report_df.insert(3, '', 'I')
-    ### Movemos la columna de monto
-    position = 4  # Índice de la posición deseada
-    columns = td_bank_report_df.columns.tolist()
-    column_to_move = columns[5]  # Índice de la columna que deseas mover 
-    columns.remove(column_to_move)
-    columns.insert(position, column_to_move)
-    td_bank_report_df = td_bank_report_df[columns]
-
-    # Extraemos transacciones sin monto (void)
-    transaction_amount_column = 4
-    void_transactions = td_bank_report_df.loc[td_bank_report_df[td_bank_report_df.columns[transaction_amount_column]].isnull()]
-
-    #Eliminamos las transacciones en las que el monto sea vacio (void)
-    td_bank_report_df = td_bank_report_df.dropna(subset=[td_bank_report_df.columns[transaction_amount_column]])
 
     try:
         #Le damos formato a las fechas del dataframe de las transacciones void
@@ -338,7 +355,7 @@ def process():
     except Exception as e:
         pass
 
-    void_transactions_name_file = f"VOID TRANSACTIONS {today}.xlsx"
+    void_transactions_name_file = f"VOID TRANSACTIONS {timestamp}.xlsx"
 
     try_again = True
     while try_again:  
@@ -368,17 +385,7 @@ def process():
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Assigning data format and conditions")
 
-    # Convertir las columnas a tipo de datos de fecha
-    try:
-        td_bank_report_df[td_bank_report_df.columns[0]] = pd.to_datetime(td_bank_report_df[td_bank_report_df.columns[0]]).dt.strftime('%m/%d/%Y')
-    except Exception as e:
-        rsp = messagebox.askyesno("Error", f"{e}\n\nThere was a problem when trying to format the column corresponding to the date\n\nDo you want to continue anyway?")
-
-        if not rsp:
-            clean(False)
-            return
-
-    #Hacemos la misma columna de tipo float
+    ####Formato tipo de datos
     try:
         td_bank_report_df[td_bank_report_df.columns[1]] = td_bank_report_df[td_bank_report_df.columns[1]].astype(str)
     except Exception as e:
@@ -411,8 +418,8 @@ def process():
     #Cortamos los nombres hasta un maximo de 30 caracteres
     td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].str.slice(0, 30)
     
-    result_file_name_xlsx = f"APDC {today}.xlsx"
-    result_file_name_csv = f"APDC {today}.csv"
+    result_file_name_xlsx = f"APDC {timestamp}.xlsx"
+    result_file_name_csv = f"APDC {timestamp}.csv"
 
     retry = True
     while retry:
@@ -473,6 +480,30 @@ def process():
     update_progress_bar(1,format_report_total_task,f"Updating {transactions_history_name}")
 
     for account, df in transactions_per_account_to_verify.items():
+
+        ######Formato especifico
+        ### Movemos la columna del monto de la transaccion
+        position = 4  # Índice de la posición deseada
+        columns = df.columns.tolist()
+        column_to_move = columns[3]  # Índice de la columna que deseas mover 
+        columns.remove(column_to_move)
+        columns.insert(position, column_to_move)
+        transactions_per_account_to_verify[account] = df[columns]
+        df = df[columns]
+
+        #Agregamos el timestamp
+        # Obtener el índice de la última fila con datos
+        last_row_index = df.last_valid_index()
+
+        # Obtener el número de columnas en el DataFrame
+        num_columns = df.shape[1]
+
+        # Agregar una nueva columna después de la última columna con datos
+        df.insert(num_columns, '', '')
+
+        # Asignar el valor al dato en la celda específica
+        df.at[last_row_index, df.columns[num_columns]] = timestamp
+
         try:
             #Accedemos a la hoja de la cuenta a procesar
             transactions_history_workbook_page = transactions_history_workbook[account]
