@@ -124,8 +124,8 @@ def process():
         return
     
     #Mostramos barra de progreso
+    barra_progreso["value"] = 25
     toggle_progress_bar(True, "Reading Files")
-
     # Verificacion de formato quickbook report
     try:
         qb_report_df = pd.read_excel(input_quickbooks_report, header=None, sheet_name="Sheet1")           
@@ -168,22 +168,11 @@ def process():
         clean(clean_inputs=False)
         return
 
-    # #Diccionario para guardar el ultimo numero de transaccion procesado por cada cuenta
-    # last_transaction_processed_by_account = {}
-
-    ########Recorremos el data frame de el historial de transacciones con todas las hojas y extraemos la ultima fila junto con la celda especifica que tiene el numero de transaccion
-    # for account_number, df_page in transactions_history_df.items():
-    #     last_row = df_page.tail(1)
-    #     transaction_number = last_row.iloc[0, 2]  # Obtener el valor de la columna 2
-    #     last_transaction_processed_by_account[account_number] = transaction_number
-
     #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Deleting unnecessary data")
+    update_progress_bar(1,format_report_total_task,"Deleting unnecessary data to the report Check Positive Pay")
 
     #Extraemos la columna 1 y 10, a su vez eliminamos las filas que tengan vacia la celda en la columna 1
     account_range_limit = qb_report_df.iloc[:,[1,10]].dropna(subset=qb_report_df.columns[1])
-    #Extraemos las filas que tengan las celda de la columna 10 vacia
-    # account_range_limit = account_range_limit[account_range_limit[10].isna()]
 
     ############### Eliminar columnas vacias y extras
     columnas_a_eliminar_qb_report = [0,1,2,3,5,7,9]  # Índices de las columnas a eliminar
@@ -199,9 +188,6 @@ def process():
     if qb_report_df.shape[1] > 4:
         qb_report_df = qb_report_df.drop(qb_report_df.columns[columnas_extras_a_eliminar_qb_report:], axis=1)
     
-    # print(len(qb_report_df.index) - 1)
-    # print(account_range_limit.index[len(account_range_limit) - 1])
-
     #Comparamos la cantidad de filas que tiene qb_report, resto 1 para que sea acorde con la otra comparacion que es por indices (comienza desde 0), CON la cantidad de filas hasta la ultima fila que contiene datos que necesitamos. De esta manera verificamos si hay mas filas extra que se deben de eliminar
     if (len(qb_report_df.index) - 1) > (account_range_limit.index[len(account_range_limit) - 1]):
 
@@ -215,7 +201,7 @@ def process():
     qb_report_df = qb_report_df.drop(0, axis=0)
 
     #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Inserting column with account numbers")
+    update_progress_bar(1,format_report_total_task,"Inserting account numbers to the report Check Positive Pay")
 
     try:
         qb_report_df[qb_report_df.columns[1]] = qb_report_df[qb_report_df.columns[1]].astype(int)
@@ -254,6 +240,8 @@ def process():
         qb_report_df_dic[account_number].columns = range(qb_report_df_dic[account_number].shape[1])
 
     ###############Busqueda y comparacion de transacciones para hallar nuevas transacciones a verificar
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,"Looking for transactions to verify")
     accounts_no_processed = []
     transactions_per_account_to_verify = {}
     for account, transaction_history_df in transactions_history_df_dic.items():
@@ -343,7 +331,7 @@ def process():
 
     ############################# Format TD BANK REPORT
     #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Sorting data")
+    update_progress_bar(1,format_report_total_task,"Formatting TD Bank report")
 
     ### Insertamos columna con la letra I
     td_bank_report_df.insert(3, '', 'I')
@@ -381,10 +369,6 @@ def process():
             return
     
     ######## Formato especifico a los datos
-
-    #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Assigning data format and conditions")
-
     ####Formato tipo de datos
     try:
         td_bank_report_df[td_bank_report_df.columns[1]] = td_bank_report_df[td_bank_report_df.columns[1]].astype(str)
@@ -418,6 +402,9 @@ def process():
     #Cortamos los nombres hasta un maximo de 30 caracteres
     td_bank_report_df[td_bank_report_df.columns[5]] = td_bank_report_df[td_bank_report_df.columns[5]].str.slice(0, 30)
     
+    #Acutalizamos barra de progreso
+    update_progress_bar(1,format_report_total_task,"Saving TD Bank report")
+    
     result_file_name_xlsx = f"APDC {timestamp}.xlsx"
     result_file_name_csv = f"APDC {timestamp}.csv"
 
@@ -439,9 +426,6 @@ def process():
 
             clean(False)
             return
-
-    #Acutalizamos barra de progreso
-    update_progress_bar(1,format_report_total_task,"Exporting resulting file")
 
     retry = True
     while retry:
@@ -473,9 +457,14 @@ def process():
     # Cerrar el escritor de Excel de Pandas y guardar el archivo Excel.
     writer.close()
 
+    #Reiniciamos barra de progreso
+    barra_progreso["value"] = 100   
+    ventana.update_idletasks()
+    time.sleep(0.5)
 
-    #TODO FORMAT
     ############################ UPDATING TRANSACTIONS HISTORY FILE
+    #Reiniciamos barra de progreso
+    barra_progreso["value"] = 0   
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,f"Updating {transactions_history_name}")
 
@@ -511,7 +500,7 @@ def process():
             messagebox.showerror("Error", "Page '" + account + "' not found in '" + transactions_history_name + "'\n\nPlease verify that '" + transactions_history_name + "' contains '" + account + "' sheet")
             #Ocultamos barra de progreso y limpiamos caja de texto
             clean(False)
-            return
+            return  
         except Exception as e:
             messagebox.showerror("Error", f"{e}\n\nPlease check {transactions_history_name} and {account} sheet")
             #Ocultamos barra de progreso y limpiamos caja de texto
@@ -552,8 +541,6 @@ def process():
         #Acutalizamos barra de progreso
         update_progress_bar(1,format_report_total_task,f"Saving {transactions_history_name}")
         #Reiniciamos barra de progreso
-        barra_progreso["value"] = 0   
-        ventana.update_idletasks()
 
         time.sleep(1)
         #Reiniciamos barra de progreso
@@ -583,8 +570,6 @@ def process():
 
     execution_in_progress = False
     ################################## END 
-
-
 
 
 
