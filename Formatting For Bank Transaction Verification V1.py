@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from openpyxl import load_workbook
 
-OUTPUT_DIRECTORY = "OUTPUT"
+TRANSACTION_VOID_LABEL = "VOID"
 
 timestamp = str(datetime.now().strftime("%m%d%Y %p%#I"))
 
@@ -216,7 +216,7 @@ def process():
     qb_report_df = qb_report_df.dropna(subset=[qb_report_df.columns[indice_columna_numero_transaccion_qb_report]])
 
     qb_report_df_dic = {}
-    void_transactions = pd.DataFrame()
+    # void_transactions = pd.DataFrame()
     ############## Insertar una nueva columna llamada 'tmp' y asignar valores según los rangos, agrega el rango desde uno menos del inicio hasta uno menos del final
     #Ordenar las transacciones de cada cuenta
     for i in range(int(len(account_range_limit) / 2)):
@@ -240,7 +240,9 @@ def process():
     update_progress_bar(1,format_report_total_task,"Looking for transactions to verify")
 
     accounts_no_processed = []
-    transactions_per_account_to_verify = {}
+    transactions_per_account_to_verify_for_history_file = {}
+    transactions_per_account_to_verify_for_td_bank_report = {}
+    accounts_with_void_transactions = {}
     for account, transaction_history_df in transactions_history_df_dic.items():
         
         #Verificamos si en nuestro reporte de qb tiene transacciones de la cuenta a procesar
@@ -299,14 +301,6 @@ def process():
                 columns.insert(position, column_to_move)
                 transactions_merge_filtered = transactions_merge_filtered[columns]
 
-                
-                # Extraemos transacciones sin monto (void)
-                transaction_amount_column = 3
-                void_transactions = pd.concat([void_transactions, transactions_merge_filtered.loc[transactions_merge_filtered[transactions_merge_filtered.columns[transaction_amount_column]].isnull()]])
-
-                #Eliminamos las transacciones en las que el monto sea vacio (void)
-                transactions_merge_filtered = transactions_merge_filtered.dropna(subset=[transactions_merge_filtered.columns[transaction_amount_column]])
-
                 # Convertir las columnas a tipo de datos de fecha
                 try:
                     transactions_merge_filtered[transactions_merge_filtered.columns[0]] = pd.to_datetime(transactions_merge_filtered[transactions_merge_filtered.columns[0]]).dt.strftime('%m/%d/%Y')
@@ -316,56 +310,90 @@ def process():
                     if not rsp:
                         clean(False)
                         return
+                    
+                transactions_filtered_for_td_bank_report = transactions_merge_filtered.copy()
+                # Extraemos transacciones sin monto (void)
+                transaction_amount_column = 3
 
-                #Agregamos resultado al diccionario
-                transactions_per_account_to_verify[account] = transactions_merge_filtered
+                # Obtener el número de columnas en el DataFrame
+                num_columns = transactions_merge_filtered.shape[1]   
+
+                void_transactions = transactions_merge_filtered[transactions_merge_filtered.columns[transaction_amount_column]].isnull()
+                
+                there_are_void_transactions = False
+                if void_transactions.any():
+                    there_are_void_transactions = True
+                    #Modificamos cada una de las filas que tenga un valor vacio en la columna correspondiente al monto de la transaccion (transacciones void) le agregamos el label correspondiente en la celda de la ultima columna
+                    transactions_merge_filtered.loc[void_transactions, num_columns + 1] = TRANSACTION_VOID_LABEL
+                
+                #Diccionario para saber que cuentas tienen transacciones void y poder manejar la posicion del timestamp
+                accounts_with_void_transactions[account] = there_are_void_transactions
+
+                # void_transactions = pd.concat([void_transactions, transactions_merge_filtered.loc[transactions_merge_filtered[transactions_merge_filtered.columns[transaction_amount_column]].isnull()]])
+
+                #Eliminamos las transacciones en las que el monto sea vacio (void)
+                transactions_filtered_for_td_bank_report = transactions_filtered_for_td_bank_report.dropna(subset=[transactions_filtered_for_td_bank_report.columns[transaction_amount_column]])
+
+                #Agregamos resultado al diccionario (contiene transacciones void)
+                if not transactions_merge_filtered.empty:
+
+                    transactions_per_account_to_verify_for_history_file[account] = transactions_merge_filtered
+
+                #No contiene transacciones void
+                if not transactions_filtered_for_td_bank_report.empty:
+
+                    transactions_per_account_to_verify_for_td_bank_report[account] = transactions_filtered_for_td_bank_report
         else: 
             #Guardamos las cuentas que no tienen transacciones en el qb report
             accounts_no_processed.append(account + " - Not found in the Check Positive Pay report")
+    if any(accounts_with_void_transactions.values()):
+        print(f"Void transactions detected\n")
 
     ############################# Format TD BANK REPORT
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Formatting TD Bank report")
 
+    only_void_transactions = False    
     #Verificamos que hayan transacciones nuevas por verificar
-    if len(transactions_per_account_to_verify) > 0:
+    if len(transactions_per_account_to_verify_for_td_bank_report) > 0:
         # Concatenar los DataFrames del diccionario en uno solo
-        td_bank_report_df = pd.concat(transactions_per_account_to_verify.values(), ignore_index=True)
+        td_bank_report_df = pd.concat(transactions_per_account_to_verify_for_td_bank_report.values(), ignore_index=True)
 
         ### Insertamos columna con la letra I
         td_bank_report_df.insert(3, '', 'I')
 
-        try:
-            #Le damos formato a las fechas del dataframe de las transacciones void
-            void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
+        ####Codigo para exportar un archivo con las void transactions
+        # try:
+        #     #Le damos formato a las fechas del dataframe de las transacciones void
+        #     void_transactions[void_transactions.columns[0]] = pd.to_datetime(void_transactions[void_transactions.columns[0]]).dt.strftime('%m/%d/%Y')
 
-        except Exception as e:
-            pass
+        # except Exception as e:
+        #     pass
 
-        void_transactions_name_file = f"VOID TRANSACTIONS {timestamp}.xlsx"
+        # void_transactions_name_file = f"VOID TRANSACTIONS {timestamp}.xlsx"
 
-        try_again = True
-        while try_again:  
-            try:
-                #Guardamos las transacciones void en un archivo aparte
-                if(not void_transactions.empty):
+        # try_again = True
+        # while try_again:  
+        #     try:
+        #         #Guardamos las transacciones void en un archivo aparte
+        #         if(not void_transactions.empty):
 
-                    void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
-                    print(f"Void transactions file has been created\n")
+        #             void_transactions.to_excel(void_transactions_name_file, header=None, index=False)  
+        #             print(f"Void transactions file has been created\n")
 
-                try_again = False
-            except PermissionError:
+        #         try_again = False
+        #     except PermissionError:
                 
-                rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
+        #         rsp = messagebox.askretrycancel("Permission error", f"Could not update file '{void_transactions_name_file}' \nIf you have this file open please close it \n\nDo you want to try again?")
 
-                if not rsp:
-                    clean(False)
-                    return
-            except Exception as e:
-                messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
-                #Ocultamos barra de progreso y limpiamos caja de texto
-                clean(False)
-                return
+        #         if not rsp:
+        #             clean(False)
+        #             return
+        #     except Exception as e:
+        #         messagebox.showerror("Error", str(e) + "\n\nFailed to export file '" + void_transactions_name_file + "'")
+        #         #Ocultamos barra de progreso y limpiamos caja de texto
+        #         clean(False)
+        #         return
         
         ######## Formato especifico a los datos
         ####Formato tipo de datos
@@ -457,6 +485,8 @@ def process():
         writer.close()
     else:
         retry = False
+        if any(accounts_with_void_transactions.values()):
+            only_void_transactions = True
 
     #Reiniciamos barra de progreso
     barra_progreso["value"] = 100   
@@ -469,7 +499,7 @@ def process():
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,f"Updating {transactions_history_name}")
 
-    for account, df in transactions_per_account_to_verify.items():
+    for account, df in transactions_per_account_to_verify_for_history_file.items():
 
         ######Formato especifico
         ### Movemos la columna del monto de la transaccion
@@ -478,18 +508,23 @@ def process():
         column_to_move = columns[3]  # Índice de la columna que deseas mover 
         columns.remove(column_to_move)
         columns.insert(position, column_to_move)
-        transactions_per_account_to_verify[account] = df[columns]
+        transactions_per_account_to_verify_for_history_file[account] = df[columns]
         df = df[columns]
 
         #Agregamos el timestamp
         # Obtener el índice de la última fila con datos
         last_row_index = df.last_valid_index()
 
-        # Obtener el número de columnas en el DataFrame
         num_columns = df.shape[1]
 
         #Numero de columnas a agregar
         columns_to_add = 2
+
+        #Si esa cuenta tiene transacciones void
+        if accounts_with_void_transactions[account]:
+
+            # Obtener el número de columnas en el DataFrame
+            columns_to_add = 1
 
         #Columna destino
         destination_colum = num_columns + columns_to_add        
@@ -590,17 +625,17 @@ def process():
     execution_in_progress = False
     ################################## END 
 
-
-
     #Acutalizamos barra de progreso
     update_progress_bar(1,format_report_total_task,"Ending process")
     time.sleep(0.5)
     toggle_progress_bar()
-
     sucess_message = "The process has finished successfully"
 
-    if len(transactions_per_account_to_verify) > 0:
-        sucess_message = sucess_message + "\n\nUpdated accounts.\n" + "\n".join(str(elemento) for elemento in transactions_per_account_to_verify.keys())
+    if only_void_transactions:
+        sucess_message = sucess_message + "\n\nOnly void transactions found, format file for td bank platform has not been created"
+
+    if len(transactions_per_account_to_verify_for_history_file) > 0:
+        sucess_message = sucess_message + "\n\nUpdated accounts.\n" + "\n".join(str(elemento) for elemento in transactions_per_account_to_verify_for_history_file.keys())
 
     if len(accounts_no_processed) > 0:
         sucess_message = sucess_message + "\n\nUnprocessed accounts.\n" + "\n".join(str(elemento) for elemento in accounts_no_processed)
