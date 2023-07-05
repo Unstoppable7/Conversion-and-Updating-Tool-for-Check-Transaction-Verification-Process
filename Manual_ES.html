@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Manual de Uso - APDC Proceso de Verificación de Cheques</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                line-height: 1.5;
+                margin: 30px;
+            }
+            h1, h2, h3 , h4{
+                color: #333;
+            }
+            h2 {
+                margin-top: 20px;
+            }
+            h3 {
+                margin-top: 10px;
+            }
+            p {
+                color: #404040;
+            }
+            code {
+                background-color: #f5f5f5;
+                padding: 2px 5px;
+                font-family: Consolas, monospace;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Manual de Uso - APDC Herramienta de conversion del reporte Check Positive Pay extraído de Quickbooks en el formato requerido por la plataforma de TD Bank para la verificación de transacciones y actualizacion del archivo con el historial de transacciones verificadas</h1>
+        <h2>Descripción</h2>
+        <p>Esta aplicación está construida en Python y Tkinter con el objetivo de automatizar el proceso de la creacion de un archivo de tipo CSV desde el reporte de Quickbooks Check Positive Pay con el formato y datos especificos requeridos por la plataforma de TD Bank para la verificacion de transacciones, a su vez tambien actualiza el archivo tipo XLSX que se utiliza para llevar el registro historico de todas las transacciones verificadas.</p>
+
+        <h2>Requisitos del sistema</h2>
+        <ul>
+            <li>Para la ejecución del programa no se requiere ningún requerimiento de software específico. Sin embargo, para un funcionamiento correcto y obtener los resultados esperados, se necesitan las siguientes condiciones:</li>
+            <li>Reporte "Check Positive Pay" exportado desde Quickbooks</li>
+            <ul>
+                <li>Los datos del reporte deben estar en una hoja llamada "Sheet1". Por lo general, el archivo se exporta con esta configuración predeterminada.</li>
+                <li>El archivo debe ser de tipo .XLSX, es decir, una hoja de cálculo de Excel en la versión 2007 o posterior.</li>
+            </ul>
+            <li>Archivo con registro historico de todas las transacciones verificadas</li>
+            <ul>
+                <li>Este archivo registra todas las transacciones verificadas por cada una de las cuentas separadas cada una en una pagina diferente.</li>
+                <li>Es importante tener en cuenta el formato utilizado por el software para detectar correctamente los datos a extraer y modificar. Cada una de las paginas debe de tener unica y exclusivamente su nombre con los ultimos cuatro digitos de la cuenta en cuestion, por ejemplo, 2674. Asi mismo se deben de mantener las columnas de los datos en el orden siguiente, fecha, numero de cuenta completo, numero de transaccion, nombre de la persona a quien va dirigida la transaccion, monto de la transaccion.</li>
+                <li>Es necesario que este archivo se mantenga cerrado cuando se este ejecutando el procesamiento de los datos ya que el software realiza operaciones de lectura y escritura en el mismo.</li>
+            </ul>
+        </ul>
+
+        <h2>Instalación</h2>
+        <ul>
+            <li>No es necesario realizar ninguna instalación.</li>
+        </ul>
+
+        <h2>Ejecución</h2>
+        <ul>
+            <li>Hacer doble clic en el archivo ejecutable proporcionado.</li>
+        </ul>
+
+        <h2>Funcionalidades principales</h2>
+        <h3>Selección de archivos</h3>
+        <ul>
+            <li>En la interfaz gráfica, se muestran dos secciones: "Verified Transaction History File" y "Check Positive Pay Quickbooks Report".</li>
+            <li>En la sección "Check Positive Pay Quickbooks Report", se puede seleccionar un único archivo de tipo XLSX (Excel versión 2007 o posterior) haciendo clic en el botón "Select file". Aquí se debe seleccionar el reporte de tipo "Check Positive Pay" exportado de Quickbooks.</li>
+            <li>En la sección "Verified Transaction History File", se puede seleccionar un único archivo de tipo XLSX (Excel versión 2007 o posterior) haciendo clic en el botón "Select file". Aquí se seleccionará el archivo con el registro historico de todas las transacciones verificadas.</li>
+        </ul>
+
+        <h2>Procesamiento de archivos</h2>
+        <p>El procesamiento de archivos se lleva a cabo siguiendo los pasos descritos a continuación:</p>
+        <h3>Selección de archivos</h3>
+        <ul>
+            <li>Seleccione los archivos necesarios y luego haga clic en el botón "Start Process" para iniciar el procesamiento.</li>
+        </ul>
+        <h3>Progreso y mensajes</h3>
+        <ul>
+            <li>Durante el procesamiento, se mostrará una barra de progreso que proporciona información general sobre el proceso en curso.</li>
+            <li>En la parte inferior de la interfaz, si es el caso se mostrará una caja de texto con mensajes relevantes sobre el proceso.</li>
+        </ul>
+        <h3>Situaciones durante el procesamiento</h3>
+        <ol>
+            <li>Detección de transacciones nulas o vacías: Es posible que el reporte de Quickbooks contenga transacciones sin monto especificado.</li>
+        </ol>
+        <h3>Procesamiento de los datos</h3>
+        <p>A continuación se menciona el ciclo que ejecuta el software para el procesamiento de los datos.</p>
+        <ol>
+            <li>Lectura de los archivos seleccionados.</li>
+            <li>Extraccion de información de reporte de Quickbooks Check Positive Pay</li>
+            <li>Creacion de grupos independientes de datos por cada cuenta detectada</li>
+            <li>Extraccion de información de reporte de archivo con registro historico de todas las transacciones verificadas</li>
+            <li>Creacion de grupos independientes de datos por cada cuenta detectada</li>
+            <li>Comparacion y busqueda de coincidencias entre datos extraidos</li>
+            <li>Identificacion de nuevas transacciones</li>
+            <li>Tratamiento de transacciones nulas o vacias</li>
+            <li>Preparacion de datos con formato especifico para plataforma TD Bank</li>
+            <li>Exportacion de archivos de tipo CSV y XLSX para plataforma TD Bank</li>
+            <li>Preparacion de datos con formato especifico para archivo con registro historico de todas las transacciones verificadas</li>
+            <li>Insercion de datos en archivo con registro historico de todas las transacciones verificadas</li>
+            <li>Guardado de archivo con registro historico de todas las transacciones verificadas</li>
+        </ol>
+
+        <h3>Resultados</h3>
+
+        <p>El software genera los siguientes resultados:</p>
+
+        <p>Cada uno de los archivos resultantes tendrá por nombre una estructura de tiempo que consiste en la palabra "APDC" junto al mes, dia, año y hora en la cual fue realizado el proceso, por ejemplo, APDC 07052023 AM11</p>
+        
+        <p>Estos archivos se van a ubicar en la raiz del archivo ejecutable:</p>
+
+        <ul>
+            <li>Archivo de tipo XLSX: Este archivo contiene los datos y el formato especifico requerido por la plataforma de TD Bank para la verificacion de transacciones. Este archivo solo se exporta para fines de verificacion y de manejo de los datos pero no debe ser subido a la plataforma bancaria.</li>
+            <li>Archivo de tipo CSV: Este archivo contiene los datos y el formato especifico requerido por la plataforma de TD Bank para la verificacion de transacciones. Este archivo debe ser subido a la plataforma bancaria.</li>
+        </ul>
+
+        <h4>Nota</h4>
+        <ul>
+            <li>Cada vez que se ejecute el procesamiento de datos, todos los archivos resultantes de este nuevo proceso van a sobrescribir los archivos creados en procesos anteriores, siempre y cuando se ejecute el proceso el mismo dia y a la misma hora (nombres identicos).</li>
+        </ul>
+
+        <h4>Archivo con registro historico de todas las transacciones verificadas</h4>
+        <ul>
+            <li>Este archivo se actualizará con los resultados obtenidos, insertando los datos correspondientes en las hojas designadas.</li>
+        </ul>
+
+        <h2>Notas adicionales</h2>
+        <ul>
+            <li>Asegúrese de tener los archivos necesarios en el formato correcto antes de comenzar el procesamiento.</li>
+            <li>Si se experimenta algún problema o error, verifique que los archivos seleccionados sean válidos y cumplan con los requisitos esperados.</li>
+        </ul>
+    </body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Manual de Uso - APDC Proceso de Verificación de Cheques</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                line-height: 1.5;
+                margin: 30px;
+            }
+            h1, h2, h3 , h4{
+                color: #333;
+            }
+            h2 {
+                margin-top: 20px;
+            }
+            h3 {
+                margin-top: 10px;
+            }
+            p {
+                color: #404040;
+            }
+            code {
+                background-color: #f5f5f5;
+                padding: 2px 5px;
+                font-family: Consolas, monospace;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>User Manual - APDC Conversion tool of the check positive pay report from Quickbooks to a TD Bank platform required formta for transaction verification and file updating with the verified transactions record</h1>
+        <h2>Description</h2>
+        <p>This application is built in Python and Tkinter with the aim of automating the process of creating a CSV file from the Quickbooks Check Positive Pay report with the specific format and data required by the TD Bank platform for transaction verification. It also updates the XLSX file used to keep a historical record of all verified transactions.</p>
+
+        <h2>System Requirements</h2>
+        <ul>
+            <li>No specific software requirements are needed for running the program. However, to ensure proper functioning and expected results, the following conditions are required:</li>
+            <li>"Check Positive Pay" report exported from Quickbooks</li>
+            <ul>
+                <li>The report data should be in a sheet named "Sheet1". Typically, the file is exported with this default configuration.</li>
+                <li>The file must be in .XLSX format, i.e., an Excel spreadsheet in version 2007 or later.</li>
+            </ul>
+            <li>File with a record of all verified transactions</li>
+            <ul>
+                <li>This file records all the verified transactions for each separate account on different pages.</li>
+                <li>It is important to note the format used by the software to correctly identify the data to extract and modify. Each page must have its unique name consisting of the last four digits of the respective account, for example, 2674. The data columns should be maintained in the following order: date, complete account number, transaction number, recipient's name, transaction amount.</li>
+                <li>This file must remain closed when processing the data, as the software performs read and write operations on it.</li>
+            </ul>
+        </ul>
+
+        <h2>Installation</h2>
+        <ul>
+            <li>No installation is required.</li>
+        </ul>
+
+        <h2>Execution</h2>
+        <ul>
+            <li>Double-click on the provided executable file.</li>
+        </ul>
+
+        <h2>Main Functionality</h2>
+        <h3>File Selection</h3>
+        <ul>
+            <li>In the graphical interface, two sections are displayed: "Verified Transaction History File" and "Check Positive Pay Quickbooks Report".</li>
+            <li>In the "Check Positive Pay Quickbooks Report" section, you can select a single XLSX file (Excel version 2007 or later) by clicking the "Select file" button. Here, you should select the "Check Positive Pay" report exported from Quickbooks.</li>
+            <li>In the "Verified Transaction History File" section, you can select a single XLSX file (Excel version 2007 or later) by clicking the "Select file" button. Here, you should select the file with the record of all verified transactions.</li>
+        </ul>
+
+        <h2>File Processing</h2>
+        <p>The file processing is carried out following the steps described below:</p>
+        <h3>File Selection</h3>
+        <ul>
+            <li>Select the required files and then click the "Start Process" button to initiate the processing.</li>
+        </ul>
+        <h3>Progress and Messages</h3>
+        <ul>
+            <li>During processing, a progress bar will be displayed, providing general information about the ongoing process.</li>
+            <li>At the bottom of the interface, relevant messages about the process may be displayed in a text box, if applicable.</li>
+        </ul>
+        <h3>Situations during Processing</h3>
+        <ol>
+            <li>Detection of null or empty transactions:
+
+        It is possible that the Quickbooks report contains transactions without specified amounts.</li>
+        </ol>
+        <h3>Data Processing</h3>
+        <p>Below is the cycle executed by the software for data processing:</p>
+        <ol>
+            <li>Reading the selected files.</li>
+            <li>Extraction of information from Quickbooks Check Positive Pay report.</li>
+            <li>Creation of independent data groups for each detected account.</li>
+            <li>Extraction of information from the file with a record of all verified transactions.</li>
+            <li>Creation of independent data groups for each detected account.</li>
+            <li>Comparison and search for matches between extracted data.</li>
+            <li>Identification of new transactions.</li>
+            <li>Handling of null or empty transactions.</li>
+            <li>Preparation of data in the specific format for the TD Bank platform.</li>
+            <li>Export of CSV and XLSX files for the TD Bank platform.</li>
+            <li>Preparation of data in the specific format for the file with a record of all verified transactions.</li>
+            <li>Insertion of data into the file with a record of all verified transactions.</li>
+            <li>Saving the file with a record of all verified transactions.</li>
+        </ol>
+
+        <h3>Results</h3>
+
+        <p>The software generates the following results:</p>
+
+        <p>Each of the resulting files will be named with a time structure consisting of the word "APDC" followed by the month, day, year, and hour when the process was performed. For example, APDC 07052023 AM11</p>
+
+        <p>These files will be located in the root directory of the executable file:</p>
+
+        <ul>
+            <li>XLSX File: This file contains the data in the specific format required by the TD Bank platform for transaction verification. This file is only exported for verification purposes and data management but should not be uploaded to the banking platform.</li>
+            <li>CSV File: This file contains the data in the specific format required by the TD Bank platform for transaction verification. This file should be uploaded to the banking platform.</li>
+        </ul>
+
+        <h4>Note</h4>
+        <ul>
+            <li>Each time the data processing is executed, all resulting files from this new process will overwrite the files created in previous processes, as long as the process is executed on the same day and at the same time (identical names).</li>
+        </ul>
+
+        <h4>File with a Record of All Verified Transactions</h4>
+        <ul>
+            <li>This file will be updated with the obtained results, inserting the corresponding data into the designated sheets.</li>
+        </ul>
+
+        <h2>Additional Notes</h2>
+        <ul>
+            <li>Make sure to have the necessary files in the correct format before starting the processing.</li>
+            <li>If any issues or errors are encountered, verify that the selected files are valid and meet the expected requirements.</li>
+        </ul>
+    </body>
+</html>
