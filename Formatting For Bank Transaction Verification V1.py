@@ -665,7 +665,7 @@ ventana = tk.Tk()
 ventana.geometry("850x500")
 
 # Configurar el mensaje de bienvenida
-mensaje_bienvenida = tk.Label(ventana, text="File Export With Td Bank Format And Verified Transaction History File Update", font=("Arial", 16))
+mensaje_bienvenida = tk.Label(ventana, text="Conversion and Updating Tool for Check Transaction Verification Process", font=("Arial", 18))
 
 subtitulo_quickbooks_report = tk.Label(ventana, text="Check Positive Pay Quickbooks Report", font=("Arial", 14))
 entrada_quickbooks_report = tk.Entry(ventana, width=40)
@@ -722,7 +722,7 @@ sys.stderr = TextRedirector(caja_texto)
 # # Establecer el icono de la ventana
 # icono = 'APDC LOGO.ico'  # Reemplaza con la ruta completa del archivo de icono
 # ventana.iconbitmap(icono)
-ventana.title("APDC tool for the check transaction verification process")
+ventana.title("APDC Conversion and Updating Tool for Check Transaction Verification Process V1.0")
 
 # Ejecutar el bucle principal de la interfaz gráfica
 ventana.mainloop()
