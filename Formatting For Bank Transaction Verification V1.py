@@ -488,11 +488,22 @@ def process():
         # Obtener el número de columnas en el DataFrame
         num_columns = df.shape[1]
 
-        # Agregar una nueva columna después de la última columna con datos
-        df.insert(num_columns, '', '')
+        #Numero de columnas a agregar
+        columns_to_add = 2
+
+        #Columna destino
+        destination_colum = num_columns + columns_to_add        
+
+        #Hacemos un bucle para ir agregando columna a columna hasta la que queremos llegar
+        for i in range(columns_to_add + 1):
+            
+            column_to_insert = num_columns + i
+            
+            # Agregar una nueva columna después de la última columna con datos
+            df.insert(column_to_insert, str(i), '')
 
         # Asignar el valor al dato en la celda específica
-        df.at[last_row_index, df.columns[num_columns]] = timestamp
+        df.at[last_row_index, df.columns[destination_colum]] = timestamp
 
         try:
             #Accedemos a la hoja de la cuenta a procesar
